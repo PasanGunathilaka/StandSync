@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { describe, it, expect } from 'vitest';
 import { interpretStandup } from '../src/standup/interpret.js';
 import {
@@ -443,8 +444,49 @@ describe('ClaudeCodeLLMClient invocation', () => {
   it('disables tools, skills and project context', () => {
     expect(args).toContain('--safe-mode');
     expect(args).toContain('--disable-slash-commands');
-    expect(args.at(-2)).toBe('--tools');
-    expect(args.at(-1)).toBe(''); // variadic, kept last so it swallows nothing
+  });
+
+  // Tool suppression is a safety property, not a preference: interpreting a
+  // standup must never have filesystem, Bash, MCP or web access.
+  describe('--tools "" guardrail', () => {
+    it('always passes --tools with an empty value', () => {
+      expect(args).toContain('--tools');
+      expect(args[args.indexOf('--tools') + 1]).toBe('');
+    });
+
+    it('keeps --tools "" as the final argument pair', () => {
+      // `--tools <tools...>` is variadic, so anything after it would be parsed as
+      // a tool name. Last position is what makes the empty value mean "none".
+      expect(args.at(-2)).toBe('--tools');
+      expect(args.at(-1)).toBe('');
+      expect(args.indexOf('--tools')).toBe(args.length - 2);
+    });
+
+    it('passes --tools exactly once', () => {
+      expect(args.filter((a) => a === '--tools')).toHaveLength(1);
+    });
+
+    it('never enables tools explicitly', () => {
+      expect(args).not.toContain('default');
+      expect(args).not.toContain('--allowedTools');
+      expect(args).not.toContain('--allowed-tools');
+      expect(args).not.toContain('--dangerously-skip-permissions');
+      expect(args).not.toContain('--mcp-config');
+      expect(args).not.toContain('--add-dir');
+    });
+
+    it('refuses to run if --tools "" is not last', async () => {
+      // Simulates a future edit to buildArgs that appends a flag after --tools.
+      const broken = new ClaudeCodeLLMClient({ model: 'claude-sonnet-5' });
+      broken.buildArgs = () => ['--print', '--tools', '', '--add-dir', '/etc'];
+
+      const err = await broken
+        .complete({ systemPrompt: 'x', userMessage: 'y', jsonSchema: {}, timeoutMs: TIMEOUT })
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(LLMError);
+      expect((err as Error).message).toContain('must be the final argument pair');
+    });
   });
 
   it('never uses --bare, which cannot read the subscription login', () => {
@@ -470,7 +512,12 @@ describe('ClaudeCodeLLMClient invocation', () => {
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(LLMError);
-    expect((err as Error).message).toContain('Is it installed and on PATH?');
+    // A missing CLI now surfaces as a fail-closed refusal; the underlying
+    // "is it on PATH?" detail is preserved as the cause.
+    expect((err as Error).message).toContain('Refusing to run');
+    expect(((err as Error).cause as Error | undefined)?.message).toContain(
+      'Is it installed and on PATH?',
+    );
   });
 });
 
@@ -550,6 +597,35 @@ describe.runIf(process.env.LIVE === '1')('live Claude Code interpretation', () =
     for (const t of result.tickets) expect(t.evidence.length).toBeGreaterThan(0);
   }, 180_000);
 
+  // Fails loudly the day the CLI's --tools contract changes, rather than
+  // silently interpreting standups with tools enabled.
+  it('still documents the --tools contract StandSync depends on', async () => {
+    const help = await new Promise<string>((resolve, reject) => {
+      const p = spawn('claude', ['--help'], { shell: false, windowsHide: true });
+      let out = '';
+      p.stdout.setEncoding('utf8');
+      p.stdout.on('data', (c: string) => (out += c));
+      p.on('error', reject);
+      p.on('close', () => resolve(out));
+    });
+
+    expect(help).toMatch(/--tools\s+<tools\.\.\.>/); // still variadic
+    expect(help).toMatch(/use\s+""\s+to\s+disable\s+all\s+tools/i); // "" still means none
+  }, 30_000);
+
+  it('reports no tool activity on a real interpretation call', async () => {
+    const llm = new ClaudeCodeLLMClient({ model: 'claude-sonnet-5' });
+    // assertNoToolsWereUsed throws if the envelope shows denials or server tools.
+    await expect(
+      llm.complete({
+        systemPrompt: SYSTEM_PROMPT,
+        userMessage: buildUserMessage('Completed TES-41.', ['TES-41'], []),
+        jsonSchema: INTERPRETATION_JSON_SCHEMA,
+        timeoutMs: 120_000,
+      }),
+    ).resolves.toBeDefined();
+  }, 180_000);
+
   // Guards the Windows kill-tree path: child.kill() alone can leave the real
   // worker running, which would hold the timeout open indefinitely.
   it('abandons the call and kills the CLI when the timeout expires', async () => {
@@ -564,4 +640,21 @@ describe.runIf(process.env.LIVE === '1')('live Claude Code interpretation', () =
     // A full call takes ~7s; the timeout must cut it far shorter than that.
     expect(Date.now() - startedAt).toBeLessThan(5_000);
   }, 60_000);
+});
+
+describe('tool-suppression guardrail (offline)', () => {
+  it('fails closed when the CLI cannot be run to confirm the tools contract', async () => {
+    const bogus = new ClaudeCodeLLMClient({
+      model: 'claude-sonnet-5',
+      cliPath: 'definitely-not-a-real-binary-standsync',
+    });
+
+    const err = await bogus
+      .complete({ systemPrompt: 'x', userMessage: 'y', jsonSchema: {}, timeoutMs: 5_000 })
+      .catch((e: unknown) => e);
+
+    // Not "assume tools are off and carry on" — refuse to interpret at all.
+    expect(err).toBeInstanceOf(LLMError);
+    expect((err as Error).message).toContain('Refusing to run');
+  });
 });

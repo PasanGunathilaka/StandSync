@@ -41,7 +41,32 @@ const CliEnvelope = z.object({
   duration_ms: z.number().optional(),
   total_cost_usd: z.number().optional(),
   session_id: z.string().optional(),
+  /** Non-empty means something tried to use a tool that should not exist. */
+  permission_denials: z.array(z.unknown()).optional(),
+  usage: z
+    .object({
+      server_tool_use: z
+        .object({
+          web_search_requests: z.number().optional(),
+          web_fetch_requests: z.number().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
+
+/**
+ * The CLI contract StandSync depends on for tool suppression.
+ *
+ * `--tools` is documented as: "Specify the list of available tools from the
+ * built-in set. Use "" to disable all tools". If a future CLI build drops the
+ * flag, stops being variadic, or removes the empty-string semantics, passing
+ * `--tools ""` could silently start meaning "all tools" instead of "none".
+ * Interpreting a standup needs no filesystem, Bash, MCP or web access, so we
+ * verify the contract up front and refuse to run if it no longer holds.
+ */
+const TOOLS_FLAG_SIGNATURE = /--tools\s+<tools\.\.\.>/;
+const TOOLS_EMPTY_DISABLES = /use\s+""\s+to\s+disable\s+all\s+tools/i;
 
 export interface ClaudeCodeOptions {
   model: string;
@@ -55,6 +80,8 @@ export class ClaudeCodeLLMClient implements LLMClient {
   readonly model: string;
   private readonly cliPath: string;
   private readonly log: Logger;
+  /** Memoized --tools contract check; runs at most once per client. */
+  private toolContractCheck: Promise<void> | undefined;
 
   constructor(opts: ClaudeCodeOptions) {
     this.model = opts.model;
@@ -77,15 +104,38 @@ export class ClaudeCodeLLMClient implements LLMClient {
       // Strip everything a standup interpreter has no business touching.
       '--safe-mode',
       '--disable-slash-commands',
-      // Variadic option: keep it last so it cannot swallow a following flag.
+      // `--tools` is variadic (`--tools <tools...>`), so it consumes every
+      // following argument that is not itself a flag. It MUST stay last: placed
+      // anywhere else, the empty string plus whatever follows would be parsed as
+      // a tool list, and tool suppression would silently break. The pair is kept
+      // adjacent and terminal, and assertToolsFlagIsLast() enforces it.
       '--tools',
       '',
     ];
   }
 
+  /**
+   * Fails closed if `--tools ""` is not the final argument pair. Called on every
+   * invocation so a future edit to buildArgs cannot quietly re-enable tools.
+   */
+  private assertToolsFlagIsLast(args: string[]): void {
+    if (args.at(-2) !== '--tools' || args.at(-1) !== '') {
+      throw new LLMError(
+        'Refusing to call Claude Code: `--tools ""` must be the final argument pair, ' +
+          'otherwise the variadic flag can swallow following arguments and tools stay enabled.',
+        this.name,
+      );
+    }
+  }
+
   async complete(req: LLMRequest): Promise<LLMResponse> {
+    // Cheap local invariant first, then the one-time subprocess contract check.
+    const args = this.buildArgs(req);
+    this.assertToolsFlagIsLast(args);
+    await this.verifyToolSuppressionSupported();
+
     const startedAt = Date.now();
-    const raw = await this.run(this.buildArgs(req), req.userMessage, req.timeoutMs);
+    const raw = await this.run(args, req.userMessage, req.timeoutMs);
     const durationMs = Date.now() - startedAt;
 
     let envelope: z.infer<typeof CliEnvelope>;
@@ -114,6 +164,8 @@ export class ClaudeCodeLLMClient implements LLMClient {
       );
     }
 
+    this.assertNoToolsWereUsed(envelope);
+
     // Model and provider are logged; auth material never is.
     this.log.info(
       {
@@ -137,6 +189,73 @@ export class ClaudeCodeLLMClient implements LLMClient {
         ...(envelope.session_id === undefined ? {} : { sessionId: envelope.session_id }),
       },
     };
+  }
+
+  /**
+   * Second layer: evidence in the response that a tool ran anyway. A denial means
+   * something attempted a tool call; a server-tool count means one actually ran.
+   * Either way the suppression contract is broken, so we discard the result rather
+   * than return data produced with capabilities StandSync never granted.
+   */
+  private assertNoToolsWereUsed(envelope: z.infer<typeof CliEnvelope>): void {
+    const denials = envelope.permission_denials?.length ?? 0;
+    const webSearches = envelope.usage?.server_tool_use?.web_search_requests ?? 0;
+    const webFetches = envelope.usage?.server_tool_use?.web_fetch_requests ?? 0;
+
+    if (denials === 0 && webSearches === 0 && webFetches === 0) return;
+
+    this.log.error(
+      { provider: this.name, denials, webSearches, webFetches, status: 'tools_used' },
+      'Claude Code used or attempted tools during interpretation — discarding the result',
+    );
+    throw new LLMError(
+      `Refusing the interpretation: tools were active during the call ` +
+        `(${denials} permission denial(s), ${webSearches} web search(es), ${webFetches} web fetch(es)). ` +
+        `Standup interpretation must run with no tool access.`,
+      this.name,
+    );
+  }
+
+  /**
+   * First layer, run once per client: confirm the installed CLI still documents
+   * `--tools <tools...>` with the empty-string-disables-everything semantics.
+   * If the contract has changed, fail closed rather than assume tools are off.
+   */
+  private verifyToolSuppressionSupported(): Promise<void> {
+    this.toolContractCheck ??= this.checkToolContract();
+    return this.toolContractCheck;
+  }
+
+  private async checkToolContract(): Promise<void> {
+    let help: string;
+    try {
+      help = await this.run(['--help'], '', 15_000);
+    } catch (cause) {
+      throw new LLMError(
+        `Could not verify the Claude Code CLI tool-suppression contract via --help. ` +
+          `Refusing to run rather than risk interpreting a standup with tools enabled.`,
+        this.name,
+        { cause },
+      );
+    }
+
+    const variadic = TOOLS_FLAG_SIGNATURE.test(help);
+    const emptyDisables = TOOLS_EMPTY_DISABLES.test(help);
+    if (variadic && emptyDisables) {
+      this.log.debug(
+        { provider: this.name, status: 'tool_contract_ok' },
+        'Claude Code --tools contract verified',
+      );
+      return;
+    }
+
+    throw new LLMError(
+      `The installed Claude Code CLI no longer documents the tool-suppression contract ` +
+        `StandSync relies on (variadic --tools: ${variadic}, '""' disables all tools: ${emptyDisables}). ` +
+        `Refusing to run so interpretation cannot silently gain filesystem, Bash, MCP or web access. ` +
+        `Set LLM_PROVIDER=mock to continue without a model.`,
+      this.name,
+    );
   }
 
   /** Spawns the CLI, writes the prompt to stdin, and enforces the timeout. */

@@ -19,7 +19,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed:jira": "tsx scripts/seed-jira.ts",
-    "dev:post": "tsx scripts/dev-post.ts"
+    "dev:post": "tsx scripts/dev-post.ts",
+    "teams:icons": "tsx scripts/make-icons.ts",
+    "teams:package": "tsx scripts/package-teams-app.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

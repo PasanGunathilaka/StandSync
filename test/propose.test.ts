@@ -147,6 +147,47 @@ describe('proposal mapping table', () => {
     expect(noneOf(withoutComment)?.reason).toContain('not finished');
   });
 
+  // StandSync is deliberately conservative about reversing completed work:
+  // Done -> In Progress must be an explicit human action, not a standup mapping.
+  it('in_progress + already Done → never reopens the ticket', () => {
+    const p = propose(interp('TES-41', 'in_progress'), found('TES-41', 'Done'));
+
+    expect(transitionOf(p)).toBeUndefined();
+    expect(p.actions.every((a) => a.type !== 'transition')).toBe(true);
+    expect(noneOf(p)?.reason).toBe(
+      'Standup indicates active work, but this Jira ticket is already Done.',
+    );
+    expect(isActionable(p)).toBe(false);
+  });
+
+  it('in_progress + already Done → comments only when Claude supplied context', () => {
+    const withContext = propose(
+      interp('TES-41', 'in_progress', {
+        commentText: 'Still polishing the retry backoff before release.',
+      }),
+      found('TES-41', 'Done'),
+    );
+
+    expect(transitionOf(withContext)).toBeUndefined();
+    expect(commentOf(withContext)?.body).toBe('Still polishing the retry backoff before release.');
+    // Kept visible and reviewable rather than hidden.
+    expect(withContext.explanation).toContain('already Done');
+  });
+
+  it('in_progress + already Done stays visible for human review', () => {
+    const proposals = buildProposals({
+      interpretation: { tickets: [interp('TES-41', 'in_progress')], unresolvedMentions: [] },
+      lookups: [found('TES-41', 'Done')],
+      statuses: STATUSES,
+      idFactory: stableId,
+    });
+
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]?.explanation).toContain(
+      'Standup indicates active work, but this Jira ticket is already Done',
+    );
+  });
+
   it('no_change → no action', () => {
     const p = propose(interp('TES-80', 'no_change'), found('TES-80', 'To Do'));
     expect(isActionable(p)).toBe(false);

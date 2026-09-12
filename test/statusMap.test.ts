@@ -140,3 +140,21 @@ describe('resolveStatusChange', () => {
     expect(resolveStatusChange('blocked', issue('In Progress'), STATUSES).kind).toBe('no-target');
   });
 });
+
+describe('conservative handling of completed tickets', () => {
+  it('never targets In Progress for a ticket that is already Done', () => {
+    // Reversing completed work needs an explicit human decision, not a mapping.
+    expect(targetStatusFor('in_progress', 'Done', STATUSES)).toBeNull();
+    expect(resolveStatusChange('in_progress', issue('Done'), STATUSES).kind).toBe('no-target');
+  });
+
+  it('still moves a not-started or unknown status to In Progress', () => {
+    expect(targetStatusFor('in_progress', 'To Do', STATUSES)).toBe('In Progress');
+    expect(targetStatusFor('in_progress', 'Backlog', STATUSES)).toBe('In Progress');
+  });
+
+  it('applies the same rule to a renamed done status', () => {
+    const custom: StatusConfig = { done: 'Closed', inProgress: 'Doing', todo: 'Backlog' };
+    expect(targetStatusFor('in_progress', 'Closed', custom)).toBeNull();
+  });
+});

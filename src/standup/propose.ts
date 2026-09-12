@@ -106,6 +106,12 @@ function buildOne(
       break;
 
     case 'no-target':
+      // in_progress only yields no-target when the ticket is already Done, so the
+      // author's "I'm working on this" contradicts Jira. Say so plainly rather
+      // than silently doing nothing.
+      if (ticket.intent === 'in_progress') {
+        notes.push('Standup indicates active work, but this Jira ticket is already Done');
+      }
       break;
   }
 
@@ -118,7 +124,7 @@ function buildOne(
 
   // 3. Nothing actionable — say why, rather than showing an empty row.
   if (actions.length === 0) {
-    actions.push({ type: 'none', reason: reasonForNoAction(ticket, resolution.kind, notes) });
+    actions.push({ type: 'none', reason: reasonForNoAction(ticket, notes) });
   }
 
   const actionable = actions.some((a) => a.type !== 'none');
@@ -151,13 +157,10 @@ function commentFor(ticket: TicketInterpretation): string | undefined {
   return undefined;
 }
 
-function reasonForNoAction(
-  ticket: TicketInterpretation,
-  resolutionKind: string,
-  notes: string[],
-): string {
-  if (resolutionKind === 'already-there') return notes[0] ?? 'already in the target status';
-  if (resolutionKind === 'no-transition') return notes[0] ?? 'no transition available';
+function reasonForNoAction(ticket: TicketInterpretation, notes: string[]): string {
+  // Whatever the status resolution already explained is the most specific reason.
+  const note = notes[0];
+  if (note) return note.endsWith('.') ? note : `${note}.`;
 
   switch (ticket.intent) {
     case 'no_change':

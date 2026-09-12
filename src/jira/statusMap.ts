@@ -49,7 +49,11 @@ export function targetStatusFor(
       return statuses.done;
 
     case 'in_progress':
-      return statuses.inProgress;
+      // Never auto-reverse a completed ticket. If the standup says work is active
+      // on something Jira already has as Done, that contradiction is for a human
+      // to resolve — a Done -> In Progress transition needs an explicit decision
+      // outside the standup mapping.
+      return isSameStatus(currentStatus, statuses.done) ? null : statuses.inProgress;
 
     case 'blocked':
       // Blocked implies the work is underway. Move it to In Progress only from a

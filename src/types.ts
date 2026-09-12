@@ -71,6 +71,6 @@ export interface ExecutionResult {
 /** Aggregate outcome of executing a batch. */
 export interface BatchExecution {
   batchId: string;
-  status: Extract<BatchStatus, 'executed' | 'failed' | 'partial'>;
+  status: Extract<BatchStatus, 'executed' | 'failed' | 'partial' | 'rejected'>;
   results: ExecutionResult[];
 }

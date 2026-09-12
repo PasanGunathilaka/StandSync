@@ -12,7 +12,18 @@ const ConfigSchema = z.object({
   // Optional: only the 'anthropic' LLM provider needs it. The default
   // 'claude-code' provider authenticates through the Claude Code CLI instead.
   ANTHROPIC_API_KEY: z.string().trim().default(''),
+  // Always an explicit model id. CLI aliases like 'sonnet' resolve to whatever the
+  // installed Claude Code build points at (observed: 'sonnet' -> claude-sonnet-4-6),
+  // which would silently change interpretation behaviour between machines.
   ANTHROPIC_MODEL: z.string().trim().min(1).default('claude-sonnet-5'),
+
+  // claude-code: shell out to the Claude Code CLI (uses your subscription login or
+  //              CLAUDE_CODE_OAUTH_TOKEN; no ANTHROPIC_API_KEY needed).
+  // anthropic:   direct Anthropic SDK, requires ANTHROPIC_API_KEY.
+  // mock:        deterministic heuristics — unit tests and offline demo fallback.
+  LLM_PROVIDER: z.enum(['claude-code', 'anthropic', 'mock']).default('claude-code'),
+  CLAUDE_CODE_PATH: z.string().trim().min(1).default('claude'),
+  LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
 
   JIRA_BASE_URL: z.url('JIRA_BASE_URL must be a full URL, e.g. https://yourorg.atlassian.net'),
   JIRA_EMAIL: required('JIRA_EMAIL'),

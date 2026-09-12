@@ -1,0 +1,30 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "${{MICROSOFT_APP_ID}}",
+  "packageName": "com.bistec.standsync",
+  "developer": {
+    "name": "Bistec Global",
+    "websiteUrl": "https://example.com/standsync",
+    "privacyUrl": "https://example.com/standsync/privacy",
+    "termsOfUseUrl": "https://example.com/standsync/terms"
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "name": { "short": "StandSync", "full": "StandSync — standups to Jira" },
+  "description": {
+    "short": "Your team talks. Jira stays current.",
+    "full": "StandSync reads daily standup messages in this channel, uses Claude to understand what happened to each Jira ticket mentioned, and proposes status transitions and comments as an Adaptive Card. Nothing is written to Jira until a human clicks Approve."
+  },
+  "accentColor": "#2F5BEA",
+  "bots": [
+    {
+      "botId": "${{MICROSOFT_APP_ID}}",
+      "scopes": ["team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": []
+}

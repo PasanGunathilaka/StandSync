@@ -38,6 +38,19 @@ const ConfigSchema = z.object({
   MICROSOFT_APP_PASSWORD: z.string().trim().default(''),
   MICROSOFT_APP_TENANT_ID: z.string().trim().default(''),
   TEAMS_ALLOWED_CONVERSATION_ID: z.string().trim().default(''),
+  TEAMS_MESSAGING_ENDPOINT: z
+    .string()
+    .trim()
+    .startsWith('/', 'TEAMS_MESSAGING_ENDPOINT must start with /')
+    .default('/api/messages')
+    // The Teams SDK types this as `/${string}`; the startsWith check above is
+    // what makes this assertion true rather than hopeful.
+    .transform((v): `/${string}` => v as `/${string}`),
+  // Local development only: accepts activities without Teams token validation.
+  TEAMS_ALLOW_UNAUTHENTICATED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
 
   APPROVAL_POLICY: z.enum(['author_only', 'anyone']).default('anyone'),
   STALE_DAYS: z.coerce.number().int().positive().default(5),

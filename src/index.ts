@@ -8,6 +8,8 @@ import { JiraIssues } from './jira/issues.js';
 import { JiraActions } from './jira/actions.js';
 import { createLLMClient } from './llm/index.js';
 import { registerDevRoutes } from './dev/routes.js';
+import { createTeamsApp, isTeamsConfigured } from './teams/app.js';
+import type { App } from '@microsoft/teams.apps';
 import type { LLMClient } from './llm/types.js';
 
 export type StandSyncServer = ReturnType<typeof buildServer>;
@@ -64,10 +66,44 @@ export function buildServer(ctx: AppContext) {
   return app;
 }
 
+/**
+ * Mounts the Teams messaging endpoint on the same Fastify instance.
+ *
+ * Must be awaited before Fastify listens: App.initialize() is what registers the
+ * route through our adapter. App.start() is deliberately never called — Fastify
+ * owns the server lifecycle, so the adapter implements no start()/stop().
+ */
+export async function attachTeams(app: StandSyncServer, ctx: AppContext): Promise<App | undefined> {
+  if (!isTeamsConfigured(ctx.config)) {
+    logger.warn(
+      'MICROSOFT_APP_ID/PASSWORD not set — Teams is disabled. The /dev/* endpoints still work.',
+    );
+    return undefined;
+  }
+
+  const teams = createTeamsApp(app, {
+    config: ctx.config,
+    store: ctx.store,
+    issues: ctx.issues,
+    actions: ctx.actions,
+    llm: ctx.llm,
+  });
+
+  await teams.initialize();
+  logger.info(
+    { endpoint: ctx.config.TEAMS_MESSAGING_ENDPOINT },
+    'Teams endpoint mounted on Fastify',
+  );
+  return teams;
+}
+
 async function main(): Promise<void> {
   const config = getConfig();
   const ctx = buildContext(config);
   const app = buildServer(ctx);
+
+  // Mount Teams before listening so the endpoint exists for the first activity.
+  await attachTeams(app, ctx);
 
   const close = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'shutting down');

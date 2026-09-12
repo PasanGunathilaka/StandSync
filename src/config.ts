@@ -9,7 +9,9 @@ const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3978),
 
-  ANTHROPIC_API_KEY: required('ANTHROPIC_API_KEY'),
+  // Optional: only the 'anthropic' LLM provider needs it. The default
+  // 'claude-code' provider authenticates through the Claude Code CLI instead.
+  ANTHROPIC_API_KEY: z.string().trim().default(''),
   ANTHROPIC_MODEL: z.string().trim().min(1).default('claude-sonnet-5'),
 
   JIRA_BASE_URL: z.url('JIRA_BASE_URL must be a full URL, e.g. https://yourorg.atlassian.net'),

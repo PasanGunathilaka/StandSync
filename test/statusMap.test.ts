@@ -4,6 +4,7 @@ import {
   isNotStarted,
   isSameStatus,
   resolveStatusChange,
+  statusesForProject,
   targetStatusFor,
   type StatusConfig,
 } from '../src/jira/statusMap.js';
@@ -156,5 +157,44 @@ describe('conservative handling of completed tickets', () => {
   it('applies the same rule to a renamed done status', () => {
     const custom: StatusConfig = { done: 'Closed', inProgress: 'Doing', todo: 'Backlog' };
     expect(targetStatusFor('in_progress', 'Closed', custom)).toBeNull();
+  });
+});
+
+describe('statusesForProject (project-agnostic workflows)', () => {
+  const DEFAULTS: StatusConfig = { done: 'Done', inProgress: 'In Progress', todo: 'To Do' };
+
+  it('returns the defaults when a project has no override', () => {
+    expect(statusesForProject('TES', DEFAULTS)).toEqual(DEFAULTS);
+    expect(statusesForProject('PAY', DEFAULTS, { BCPM: { done: 'Closed' } })).toEqual(DEFAULTS);
+  });
+
+  it('layers a partial override over the defaults', () => {
+    // BCPM renames only "Done"; the other two stay standard.
+    expect(statusesForProject('BCPM', DEFAULTS, { BCPM: { done: 'Closed' } })).toEqual({
+      done: 'Closed',
+      inProgress: 'In Progress',
+      todo: 'To Do',
+    });
+  });
+
+  it('applies a full override', () => {
+    expect(
+      statusesForProject('BCPM', DEFAULTS, {
+        BCPM: { done: 'Closed', inProgress: 'Doing', todo: 'Backlog' },
+      }),
+    ).toEqual({ done: 'Closed', inProgress: 'Doing', todo: 'Backlog' });
+  });
+
+  it('matches the project key case-insensitively', () => {
+    const expected = { done: 'Closed', inProgress: 'In Progress', todo: 'To Do' };
+    expect(statusesForProject('BCPM', DEFAULTS, { bcpm: { done: 'Closed' } })).toEqual(expected);
+    expect(statusesForProject('bcpm', DEFAULTS, { BCPM: { done: 'Closed' } })).toEqual(expected);
+  });
+
+  it('keeps projects independent of one another', () => {
+    const overrides = { BCPM: { done: 'Closed' }, OPS: { done: 'Resolved' } };
+    expect(statusesForProject('BCPM', DEFAULTS, overrides).done).toBe('Closed');
+    expect(statusesForProject('OPS', DEFAULTS, overrides).done).toBe('Resolved');
+    expect(statusesForProject('TES', DEFAULTS, overrides).done).toBe('Done');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractKeys, filterByProject } from '../src/standup/extractKeys.js';
+import { extractKeys, projectKeyOf } from '../src/standup/extractKeys.js';
 
 describe('extractKeys', () => {
   it('pulls keys out of the canonical demo standup, in mention order', () => {
@@ -53,12 +53,18 @@ describe('extractKeys', () => {
   });
 });
 
-describe('filterByProject', () => {
-  it('keeps only the configured project', () => {
-    expect(filterByProject(['PAY-142', 'OPS-7', 'PAY-153'], 'PAY')).toEqual(['PAY-142', 'PAY-153']);
+describe('projectKeyOf', () => {
+  it('returns the project part of a key', () => {
+    expect(projectKeyOf('PAY-142')).toBe('PAY');
+    expect(projectKeyOf('TES-41')).toBe('TES');
+    expect(projectKeyOf('BCPM-33')).toBe('BCPM');
   });
 
-  it('is case-insensitive on the configured project key', () => {
-    expect(filterByProject(['PAY-142', 'OPS-7'], 'pay')).toEqual(['PAY-142']);
+  it('handles a project key that itself contains digits', () => {
+    expect(projectKeyOf('AB1-99')).toBe('AB1');
+  });
+
+  it('normalises to upper case', () => {
+    expect(projectKeyOf('pay-142')).toBe('PAY');
   });
 });

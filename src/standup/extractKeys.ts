@@ -32,8 +32,13 @@ export function extractKeys(text: string): string[] {
   return keys;
 }
 
-/** Narrows to keys belonging to one project, e.g. only PAY-* tickets. */
-export function filterByProject(keys: string[], projectKey: string): string[] {
-  const prefix = `${projectKey.toUpperCase()}-`;
-  return keys.filter((k) => k.startsWith(prefix));
+/**
+ * The project part of a Jira key: "PAY-142" -> "PAY".
+ *
+ * A key already names its project, which is why StandSync needs no configured
+ * project at runtime — this is only used to look up per-project status names.
+ */
+export function projectKeyOf(issueKey: string): string {
+  const dash = issueKey.lastIndexOf('-');
+  return dash === -1 ? issueKey.toUpperCase() : issueKey.slice(0, dash).toUpperCase();
 }

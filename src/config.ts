@@ -5,6 +5,25 @@ loadDotenv({ quiet: true });
 
 const required = (label: string) => z.string().trim().min(1, `${label} must not be empty`);
 
+/** The three workflow statuses StandSync reasons about, per project. */
+export interface StatusNames {
+  done: string;
+  inProgress: string;
+  todo: string;
+}
+
+/** Shape of JIRA_STATUS_OVERRIDES once parsed: project key -> partial statuses. */
+const StatusOverridesSchema = z.record(
+  z.string().trim().min(1),
+  z
+    .object({
+      done: z.string().trim().min(1).optional(),
+      inProgress: z.string().trim().min(1).optional(),
+      todo: z.string().trim().min(1).optional(),
+    })
+    .strict(),
+);
+
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3978),
@@ -28,11 +47,42 @@ const ConfigSchema = z.object({
   JIRA_BASE_URL: z.url('JIRA_BASE_URL must be a full URL, e.g. https://yourorg.atlassian.net'),
   JIRA_EMAIL: required('JIRA_EMAIL'),
   JIRA_API_TOKEN: required('JIRA_API_TOKEN'),
+  // Demo tooling only (scripts/seed-jira.ts). The runtime never reads this:
+  // a Jira key already names its project, so StandSync processes whatever keys
+  // appear in a standup, across as many projects as the credentials can see.
   JIRA_PROJECT_KEY: z.string().trim().min(1).default('PAY'),
 
+  // Default workflow status names, used for every project unless overridden.
   STATUS_DONE: z.string().trim().min(1).default('Done'),
   STATUS_IN_PROGRESS: z.string().trim().min(1).default('In Progress'),
   STATUS_TODO: z.string().trim().min(1).default('To Do'),
+
+  /**
+   * Per-project status names, for projects whose workflow does not use the
+   * defaults above. JSON keyed by project key, e.g.
+   *   {"BCPM":{"done":"Closed","inProgress":"Doing"}}
+   * Each field is optional and falls back to the STATUS_* default, so a project
+   * that differs in only one status needs only that one entry.
+   */
+  JIRA_STATUS_OVERRIDES: z
+    .string()
+    .trim()
+    .default('')
+    .transform((raw, ctx) => {
+      if (!raw) return {};
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        return StatusOverridesSchema.parse(parsed);
+      } catch (err) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `JIRA_STATUS_OVERRIDES must be JSON like {"BCPM":{"done":"Closed"}} — ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        });
+        return z.NEVER;
+      }
+    }),
 
   MICROSOFT_APP_ID: z.string().trim().default(''),
   MICROSOFT_APP_PASSWORD: z.string().trim().default(''),

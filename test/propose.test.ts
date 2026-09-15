@@ -380,3 +380,124 @@ describe('the TES demo standup end to end', () => {
     expect(proposals.every((p) => p.selected)).toBe(true);
   });
 });
+
+/**
+ * StandSync is project-agnostic: a Jira key already names its project, so one
+ * standup may mention tickets from several projects at once. Nothing in the
+ * runtime is scoped to a configured project.
+ */
+describe('multiple Jira projects in one standup', () => {
+  const multiProject = (statusOverrides?: Record<string, Partial<StatusConfig>>) =>
+    buildProposals({
+      interpretation: {
+        tickets: [
+          interp('TES-41', 'completed'),
+          interp('PAY-142', 'in_progress'),
+          interp('BCPM-33', 'blocked', { blockerReason: 'Waiting on the vendor' }),
+        ],
+        unresolvedMentions: [],
+      },
+      lookups: [
+        found('TES-41', 'In Progress'),
+        found('PAY-142', 'To Do'),
+        found('BCPM-33', 'To Do'),
+      ],
+      statuses: STATUSES,
+      ...(statusOverrides ? { statusOverrides } : {}),
+      idFactory: stableId,
+    });
+
+  it('proposes actions for tickets from three different projects', () => {
+    const proposals = multiProject();
+
+    expect(proposals.map((p) => p.key)).toEqual(['TES-41', 'PAY-142', 'BCPM-33']);
+    expect(transitionOf(proposals[0]!)).toMatchObject({ toStatus: 'Done', transitionId: '31' });
+    expect(transitionOf(proposals[1]!)).toMatchObject({
+      toStatus: 'In Progress',
+      transitionId: '21',
+    });
+    // blocked + not started => move to In Progress AND comment
+    expect(transitionOf(proposals[2]!)).toMatchObject({ toStatus: 'In Progress' });
+    expect(commentOf(proposals[2]!)?.body).toContain('vendor');
+  });
+
+  it('needs no configured project — keys alone drive everything', () => {
+    // No project key is passed to buildProposals at all; this is the whole point.
+    const proposals = multiProject();
+    expect(proposals).toHaveLength(3);
+    expect(proposals.every((p) => isActionable(p))).toBe(true);
+  });
+
+  it('resolves each ticket against its own project workflow vocabulary', () => {
+    // BCPM calls "Done" -> "Closed" and "In Progress" -> "Doing".
+    const proposals = buildProposals({
+      interpretation: {
+        tickets: [interp('TES-41', 'completed'), interp('BCPM-33', 'completed')],
+        unresolvedMentions: [],
+      },
+      lookups: [
+        found('TES-41', 'In Progress'), // standard workflow: reaches "Done"
+        found('BCPM-33', 'Doing', [{ id: '77', name: 'Close', toStatus: 'Closed' }]),
+      ],
+      statuses: STATUSES,
+      statusOverrides: { BCPM: { done: 'Closed', inProgress: 'Doing' } },
+      idFactory: stableId,
+    });
+
+    expect(transitionOf(proposals[0]!)).toMatchObject({ toStatus: 'Done', transitionId: '31' });
+    expect(transitionOf(proposals[1]!)).toMatchObject({ toStatus: 'Closed', transitionId: '77' });
+  });
+
+  it('leaves projects without an override on the default statuses', () => {
+    const proposals = multiProject({ BCPM: { done: 'Closed' } });
+
+    // TES and PAY are untouched by the BCPM override.
+    expect(transitionOf(proposals[0]!)).toMatchObject({ toStatus: 'Done' });
+    expect(transitionOf(proposals[1]!)).toMatchObject({ toStatus: 'In Progress' });
+  });
+
+  it('applies an override case-insensitively on the project key', () => {
+    const proposals = buildProposals({
+      interpretation: { tickets: [interp('BCPM-33', 'completed')], unresolvedMentions: [] },
+      lookups: [found('BCPM-33', 'Doing', [{ id: '77', name: 'Close', toStatus: 'Closed' }])],
+      statuses: STATUSES,
+      statusOverrides: { bcpm: { done: 'Closed' } },
+      idFactory: stableId,
+    });
+    expect(transitionOf(proposals[0]!)).toMatchObject({ toStatus: 'Closed' });
+  });
+
+  it('still resolves transition ids from each issue live, never hard-coded', () => {
+    // Same intent, same status, deliberately different transition ids per project.
+    const proposals = buildProposals({
+      interpretation: {
+        tickets: [interp('TES-41', 'completed'), interp('PAY-142', 'completed')],
+        unresolvedMentions: [],
+      },
+      lookups: [
+        found('TES-41', 'In Progress', [{ id: '31', name: 'Done', toStatus: 'Done' }]),
+        found('PAY-142', 'In Progress', [{ id: '999', name: 'Finish', toStatus: 'Done' }]),
+      ],
+      statuses: STATUSES,
+      idFactory: stableId,
+    });
+
+    expect(transitionOf(proposals[0]!)?.transitionId).toBe('31');
+    expect(transitionOf(proposals[1]!)?.transitionId).toBe('999');
+  });
+
+  it('handles one project failing lookup without affecting the others', () => {
+    const proposals = buildProposals({
+      interpretation: {
+        tickets: [interp('TES-41', 'completed'), interp('PAY-142', 'completed')],
+        unresolvedMentions: [],
+      },
+      lookups: [found('TES-41', 'In Progress'), missing('PAY-142', 'not found')],
+      statuses: STATUSES,
+      idFactory: stableId,
+    });
+
+    expect(isActionable(proposals[0]!)).toBe(true);
+    expect(isActionable(proposals[1]!)).toBe(false);
+  });
+});

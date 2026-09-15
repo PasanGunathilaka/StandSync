@@ -10,11 +10,40 @@ import type { Intent, JiraIssueState } from '../types.js';
  * proposal time, because a workflow's ids differ per project and per issue state.
  */
 
-/** Status names as configured for this Jira instance. */
+/** Status names for one project's workflow. */
 export interface StatusConfig {
   done: string;
   inProgress: string;
   todo: string;
+}
+
+/** Per-project overrides, keyed by project key (e.g. "BCPM"). */
+export type StatusOverrides = Record<string, Partial<StatusConfig>>;
+
+/**
+ * Resolves the status names to use for one project: the defaults, with any
+ * per-project overrides layered on top.
+ *
+ * StandSync processes whatever projects appear in a standup, and workflows
+ * differ — one team's "Done" is another's "Closed". Overrides are per field, so
+ * a project that only renames one status needs only that one entry.
+ */
+export function statusesForProject(
+  projectKey: string,
+  defaults: StatusConfig,
+  overrides: StatusOverrides = {},
+): StatusConfig {
+  // Match case-insensitively on both sides: the project key comes from a Jira
+  // key (always upper case), but the override map is hand-written config.
+  const wanted = projectKey.toUpperCase();
+  const match = Object.entries(overrides).find(([key]) => key.toUpperCase() === wanted);
+  const override = match?.[1] ?? {};
+
+  return {
+    done: override.done ?? defaults.done,
+    inProgress: override.inProgress ?? defaults.inProgress,
+    todo: override.todo ?? defaults.todo,
+  };
 }
 
 /** Case- and whitespace-insensitive status comparison. */

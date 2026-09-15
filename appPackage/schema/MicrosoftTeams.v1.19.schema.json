@@ -50,16 +50,11 @@
                 "description": "A relative file path to a the .json file containing the translated strings."
               }
             },
-            "required": [
-              "languageTag",
-              "file"
-            ]
+            "required": ["languageTag", "file"]
           }
         }
       },
-      "required": [
-        "defaultLanguageTag"
-      ]
+      "required": ["defaultLanguageTag"]
     },
     "developer": {
       "type": "object",
@@ -88,12 +83,7 @@
           "description": "The url to the page that provides the terms of use for the app."
         }
       },
-      "required": [
-        "name",
-        "websiteUrl",
-        "privacyUrl",
-        "termsOfUseUrl"
-      ]
+      "required": ["name", "websiteUrl", "privacyUrl", "termsOfUseUrl"]
     },
     "name": {
       "type": "object",
@@ -110,10 +100,7 @@
           "maxLength": 100
         }
       },
-      "required": [
-        "short",
-        "full"
-      ]
+      "required": ["short", "full"]
     },
     "description": {
       "type": "object",
@@ -130,10 +117,7 @@
           "maxLength": 4000
         }
       },
-      "required": [
-        "short",
-        "full"
-      ]
+      "required": ["short", "full"]
     },
     "icons": {
       "type": "object",
@@ -148,10 +132,7 @@
           "description": "A relative file path to a full color PNG icon. Size 192x192."
         }
       },
-      "required": [
-        "outline",
-        "color"
-      ]
+      "required": ["outline", "color"]
     },
     "accentColor": {
       "$ref": "#/definitions/hexColor",
@@ -179,10 +160,7 @@
             "description": "Specifies whether the tab offers an experience in the context of a channel in a team, in a 1:1 or group chat, or in an experience scoped to an individual user alone. These options are non-exclusive. Currently, configurable tabs are only supported in the teams and groupchats scopes.",
             "maxItems": 2,
             "items": {
-              "enum": [
-                "team",
-                "groupChat"
-              ]
+              "enum": ["team", "groupChat"]
             }
           },
           "meetingSurfaces": {
@@ -190,10 +168,7 @@
             "description": "The set of meetingSurfaceItem scopes that a tab belong to",
             "maxItems": 2,
             "items": {
-              "enum": [
-                "sidePanel",
-                "stage"
-              ]
+              "enum": ["sidePanel", "stage"]
             }
           },
           "context": {
@@ -222,17 +197,11 @@
             "maxItems": 2,
             "uniqueItems": true,
             "items": {
-              "enum": [
-                "sharePointFullPage",
-                "sharePointWebPart"
-              ]
+              "enum": ["sharePointFullPage", "sharePointWebPart"]
             }
           }
         },
-        "required": [
-          "configurationUrl",
-          "scopes"
-        ]
+        "required": ["configurationUrl", "scopes"]
       }
     },
     "staticTabs": {
@@ -275,11 +244,7 @@
             "description": "Specifies whether the tab offers an experience in the context of a channel in a team, or an experience scoped to an individual user alone or group chat. These options are non-exclusive. Currently static tabs are only supported in the 'personal' scope.",
             "maxItems": 3,
             "items": {
-              "enum": [
-                "team",
-                "personal",
-                "groupChat"
-              ]
+              "enum": ["team", "personal", "groupChat"]
             }
           },
           "context": {
@@ -300,10 +265,7 @@
             }
           }
         },
-        "required": [
-          "entityId",
-          "scopes"
-        ]
+        "required": ["entityId", "scopes"]
       }
     },
     "bots": {
@@ -369,11 +331,7 @@
             "description": "Specifies whether the bot offers an experience in the context of a channel in a team, in a 1:1 or group chat, or in an experience scoped to an individual user alone. These options are non-exclusive.",
             "maxItems": 3,
             "items": {
-              "enum": [
-                "team",
-                "personal",
-                "groupChat"
-              ]
+              "enum": ["team", "personal", "groupChat"]
             }
           },
           "commandLists": {
@@ -389,11 +347,7 @@
                   "description": "Specifies the scopes for which the command list is valid",
                   "maxItems": 3,
                   "items": {
-                    "enum": [
-                      "team",
-                      "personal",
-                      "groupChat"
-                    ]
+                    "enum": ["team", "personal", "groupChat"]
                   }
                 },
                 "commands": {
@@ -414,24 +368,15 @@
                         "maxLength": 128
                       }
                     },
-                    "required": [
-                      "title",
-                      "description"
-                    ]
+                    "required": ["title", "description"]
                   }
                 }
               },
-              "required": [
-                "scopes",
-                "commands"
-              ]
+              "required": ["scopes", "commands"]
             }
           }
         },
-        "required": [
-          "botId",
-          "scopes"
-        ]
+        "required": ["botId", "scopes"]
       }
     },
     "connectors": {
@@ -456,16 +401,11 @@
             "description": "Specifies whether the connector offers an experience in the context of a channel in a team, or an experience scoped to an individual user alone. Currently, only the team scope is supported.",
             "maxItems": 1,
             "items": {
-              "enum": [
-                "team"
-              ]
+              "enum": ["team"]
             }
           }
         },
-        "required": [
-          "connectorId",
-          "scopes"
-        ]
+        "required": ["connectorId", "scopes"]
       }
     },
     "subscriptionOffer": {
@@ -478,9 +418,7 @@
           "maxLength": 2048
         }
       },
-      "required": [
-        "offerId"
-      ],
+      "required": ["offerId"],
       "additionalProperties": false
     },
     "composeExtensions": {
@@ -497,10 +435,7 @@
           },
           "composeExtensionType": {
             "type": "string",
-            "enum": [
-              "botBased",
-              "apiBased"
-            ],
+            "enum": ["botBased", "apiBased"],
             "description": "Type of the compose extension."
           },
           "authorization": {
@@ -509,11 +444,7 @@
             "properties": {
               "authType": {
                 "type": "string",
-                "enum": [
-                  "none",
-                  "apiSecretServiceAuth",
-                  "microsoftEntra"
-                ],
+                "enum": ["none", "apiSecretServiceAuth", "microsoftEntra"],
                 "description": "Enum of possible authentication types."
               },
               "microsoftEntraConfiguration": {
@@ -548,7 +479,7 @@
             "description": "A relative file path to the api specification file in the manifest package."
           },
           "canUpdateConfiguration": {
-            "type": [ "boolean", "null" ],
+            "type": ["boolean", "null"],
             "description": "A value indicating whether the configuration of a compose extension can be updated by the user.",
             "default": "null"
           },
@@ -566,10 +497,7 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "query",
-                    "action"
-                  ],
+                  "enum": ["query", "action"],
                   "description": "Type of the command",
                   "default": "query"
                 },
@@ -587,9 +515,7 @@
                         "maxLength": 128
                       }
                     },
-                    "required": [
-                      "text"
-                    ]
+                    "required": ["text"]
                   }
                 },
                 "apiResponseRenderingTemplateFile": {
@@ -600,17 +526,10 @@
                   "type": "array",
                   "maxItems": 3,
                   "items": {
-                    "enum": [
-                      "compose",
-                      "commandBox",
-                      "message"
-                    ]
+                    "enum": ["compose", "commandBox", "message"]
                   },
                   "description": "Context where the command would apply",
-                  "default": [
-                    "compose",
-                    "commandBox"
-                  ]
+                  "default": ["compose", "commandBox"]
                 },
                 "title": {
                   "type": "string",
@@ -708,17 +627,11 @@
                             }
                           },
                           "additionalProperties": false,
-                          "required": [
-                            "title",
-                            "value"
-                          ]
+                          "required": ["title", "value"]
                         }
                       }
                     },
-                    "required": [
-                      "name",
-                      "title"
-                    ]
+                    "required": ["name", "title"]
                   }
                 },
                 "taskInfo": {
@@ -745,10 +658,7 @@
                   }
                 }
               },
-              "required": [
-                "id",
-                "title"
-              ]
+              "required": ["id", "title"]
             }
           },
           "messageHandlers": {
@@ -760,9 +670,7 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "link"
-                  ],
+                  "enum": ["link"],
                   "description": "Type of the message handler"
                 },
                 "value": {
@@ -784,10 +692,7 @@
                   }
                 }
               },
-              "required": [
-                "type",
-                "value"
-              ],
+              "required": ["type", "value"],
               "additionalProperties": false
             }
           }
@@ -799,10 +704,7 @@
       "description": "Specifies the permissions the app requests from users.",
       "maxItems": 2,
       "items": {
-        "enum": [
-          "identity",
-          "messageTeamMembers"
-        ]
+        "enum": ["identity", "messageTeamMembers"]
       }
     },
     "devicePermissions": {
@@ -810,13 +712,7 @@
       "description": "Specify the native features on a user's device that your app may request access to.",
       "maxItems": 5,
       "items": {
-        "enum": [
-          "geolocation",
-          "media",
-          "notifications",
-          "midi",
-          "openExternal"
-        ]
+        "enum": ["geolocation", "media", "notifications", "midi", "openExternal"]
       }
     },
     "validDomains": {
@@ -842,9 +738,7 @@
           "maxLength": 2048
         }
       },
-      "required": [
-        "id"
-      ],
+      "required": ["id"],
       "additionalProperties": false
     },
     "graphConnector": {
@@ -856,9 +750,7 @@
           "description": "The url where Graph-connector notifications for the application should be sent."
         }
       },
-      "required": [
-        "notificationUrl"
-      ],
+      "required": ["notificationUrl"],
       "additionalProperties": false
     },
     "showLoadingIndicator": {
@@ -894,11 +786,7 @@
                 "maxLength": 128
               }
             },
-            "required": [
-              "type",
-              "description",
-              "templateText"
-            ],
+            "required": ["type", "description", "templateText"],
             "additionalProperties": false
           }
         }
@@ -928,10 +816,7 @@
       "description": "List of 'non-standard' channel types that the app supports. Note: Channels of standard type are supported by default if the app supports team scope.",
       "maxItems": 2,
       "items": {
-        "enum": [
-          "sharedChannels",
-          "privateChannels"
-        ]
+        "enum": ["sharedChannels", "privateChannels"]
       }
     },
     "defaultBlockUntilAdminAction": {
@@ -945,12 +830,7 @@
     },
     "defaultInstallScope": {
       "type": "string",
-      "enum": [
-        "personal",
-        "team",
-        "groupChat",
-        "meetings"
-      ],
+      "enum": ["personal", "team", "groupChat", "meetings"],
       "description": "The install scope defined for this app by default. This will be the option displayed on the button when a user tries to add the app"
     },
     "defaultGroupCapability": {
@@ -958,29 +838,17 @@
       "properties": {
         "team": {
           "type": "string",
-          "enum": [
-            "tab",
-            "bot",
-            "connector"
-          ],
+          "enum": ["tab", "bot", "connector"],
           "description": "When the install scope selected is Team, this field specifies the default capability available"
         },
         "groupchat": {
           "type": "string",
-          "enum": [
-            "tab",
-            "bot",
-            "connector"
-          ],
+          "enum": ["tab", "bot", "connector"],
           "description": "When the install scope selected is GroupChat, this field specifies the default capability available"
         },
         "meetings": {
           "type": "string",
-          "enum": [
-            "tab",
-            "bot",
-            "connector"
-          ],
+          "enum": ["tab", "bot", "connector"],
           "description": "When the install scope selected is Meetings, this field specifies the default capability available"
         }
       },
@@ -1077,17 +945,11 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": [
-                      "Application",
-                      "Delegated"
-                    ],
+                    "enum": ["Application", "Delegated"],
                     "description": "The type of the resource-specific permission: delegated vs application."
                   }
                 },
-                "required": [
-                  "name",
-                  "type"
-                ]
+                "required": ["name", "type"]
               }
             }
           }
@@ -1119,7 +981,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [ "declarativeAgents" ]
+      "required": ["declarativeAgents"]
     }
   },
   "required": [
@@ -1222,9 +1084,7 @@
               }
             },
             "additionalProperties": false,
-            "required": [
-              "name"
-            ]
+            "required": ["name"]
           }
         },
         "scopes": {
@@ -1234,12 +1094,7 @@
           "maxItems": 4,
           "items": {
             "type": "string",
-            "enum": [
-              "mail",
-              "workbook",
-              "document",
-              "presentation"
-            ]
+            "enum": ["mail", "workbook", "document", "presentation"]
           }
         },
         "formFactors": {
@@ -1249,10 +1104,7 @@
           "maxItems": 2,
           "items": {
             "type": "string",
-            "enum": [
-              "desktop",
-              "mobile"
-            ]
+            "enum": ["desktop", "mobile"]
           }
         }
       },
@@ -1276,9 +1128,7 @@
           },
           "type": {
             "type": "string",
-            "enum": [
-              "general"
-            ],
+            "enum": ["general"],
             "default": "general",
             "description": "Supports running functions and launching pages."
           },
@@ -1288,10 +1138,7 @@
           "lifetime": {
             "type": "string",
             "default": "short",
-            "enum": [
-              "short",
-              "long"
-            ],
+            "enum": ["short", "long"],
             "description": "Runtimes with a short lifetime do not preserve state across executions. Runtimes with a long lifetime do."
           },
           "actions": {
@@ -1299,10 +1146,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "id",
-          "code"
-        ]
+        "required": ["id", "code"]
       }
     },
     "extensionRuntimesActions": {
@@ -1325,10 +1169,7 @@
         },
         "type": {
           "type": "string",
-          "enum": [
-            "executeFunction",
-            "openPage"
-          ],
+          "enum": ["executeFunction", "openPage"],
           "description": "executeFunction: Run a script function without waiting for it to finish. openPate: Open a page in a view."
         },
         "displayName": {
@@ -1357,10 +1198,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "id",
-        "type"
-      ]
+      "required": ["id", "type"]
     },
     "extensionRibbonsArray": {
       "type": "array",
@@ -1384,9 +1222,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "tabs"
-        ]
+        "required": ["tabs"]
       }
     },
     "extensionContexts": {
@@ -1432,17 +1268,11 @@
             "align": {
               "type": "string",
               "description": "Define alignment of this custom tab relative to the specified built-in tab.",
-              "enum": [
-                "after",
-                "before"
-              ]
+              "enum": ["after", "before"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "builtInTabId",
-            "align"
-          ]
+          "required": ["builtInTabId", "align"]
         },
         "builtInTabId": {
           "type": "string",
@@ -1479,16 +1309,10 @@
               }
             }
           },
-          "required": [
-            "builtInTabId"
-          ]
+          "required": ["builtInTabId"]
         },
         "id": {
-          "required": [
-            "id",
-            "label",
-            "groups"
-          ]
+          "required": ["id", "label", "groups"]
         }
       },
       "additionalProperties": false
@@ -1562,11 +1386,7 @@
           "maxItems": 20
         }
       },
-      "required": [
-        "id",
-        "label",
-        "controls"
-      ],
+      "required": ["id", "label", "controls"],
       "additionalProperties": false
     },
     "extensionCommonCustomGroupControlsItem": {
@@ -1581,10 +1401,7 @@
         "type": {
           "type": "string",
           "description": "Defines the type of control whether button or menu.",
-          "enum": [
-            "button",
-            "menu"
-          ]
+          "enum": ["button", "menu"]
         },
         "builtInControlId": {
           "type": "string",
@@ -1632,14 +1449,7 @@
           }
         }
       },
-      "required": [
-        "id",
-        "type",
-        "label",
-        "icons",
-        "supertip",
-        "actionId"
-      ]
+      "required": ["id", "type", "label", "icons", "supertip", "actionId"]
     },
     "extensionRibbonsCustomMobileGroupItem": {
       "type": "object",
@@ -1663,11 +1473,7 @@
           }
         }
       },
-      "required": [
-        "id",
-        "label",
-        "controls"
-      ]
+      "required": ["id", "label", "controls"]
     },
     "extensionCommonCustomControlMenu": {
       "type": "object",
@@ -1679,9 +1485,7 @@
         },
         "type": {
           "type": "string",
-          "enum": [
-            "menu"
-          ]
+          "enum": ["menu"]
         },
         "label": {
           "type": "string",
@@ -1714,14 +1518,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "id",
-        "type",
-        "label",
-        "icons",
-        "supertip",
-        "items"
-      ]
+      "required": ["id", "type", "label", "icons", "supertip", "items"]
     },
     "extensionCommonCustomControlMenuItem": {
       "type": "object",
@@ -1734,9 +1531,7 @@
         "type": {
           "type": "string",
           "description": "Supported values: menuItem.",
-          "enum": [
-            "menuItem"
-          ]
+          "enum": ["menuItem"]
         },
         "label": {
           "type": "string",
@@ -1770,13 +1565,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "id",
-        "type",
-        "label",
-        "supertip",
-        "actionId"
-      ]
+      "required": ["id", "type", "label", "supertip", "actionId"]
     },
     "extensionRibbonsCustomMobileControlButtonItem": {
       "type": "object",
@@ -1788,9 +1577,7 @@
         },
         "type": {
           "type": "string",
-          "enum": [
-            "mobileButton"
-          ]
+          "enum": ["mobileButton"]
         },
         "label": {
           "type": "string",
@@ -1811,13 +1598,7 @@
           "maxLength": 64
         }
       },
-      "required": [
-        "id",
-        "type",
-        "label",
-        "icons",
-        "actionId"
-      ]
+      "required": ["id", "type", "label", "icons", "actionId"]
     },
     "extensionCustomMobileIcon": {
       "type": "object",
@@ -1825,11 +1606,7 @@
         "size": {
           "type": "number",
           "description": "Size in pixels of the icon. Three image sizes are required (25, 32, and 48 pixels).",
-          "enum": [
-            25,
-            32,
-            48
-          ]
+          "enum": [25, 32, 48]
         },
         "url": {
           "$ref": "#/definitions/httpsUrl",
@@ -1838,19 +1615,11 @@
         "scale": {
           "type": "number",
           "description": "How to scale - 1,2,3 for each image. This attribute specifies the UIScreen.scale property for iOS devices.",
-          "enum": [
-            1,
-            2,
-            3
-          ]
+          "enum": [1, 2, 3]
         }
       },
       "additionalProperties": false,
-      "required": [
-        "size",
-        "url",
-        "scale"
-      ]
+      "required": ["size", "url", "scale"]
     },
     "extensionCommonSuperToolTip": {
       "type": "object",
@@ -1867,10 +1636,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "title",
-        "description"
-      ]
+      "required": ["title", "description"]
     },
     "extensionCommonIcon": {
       "type": "object",
@@ -1878,16 +1644,7 @@
         "size": {
           "type": "number",
           "description": "Size in pixels of the icon. Three image sizes are required (16, 32, and 80 pixels)",
-          "enum": [
-            16,
-            20,
-            24,
-            32,
-            40,
-            48,
-            64,
-            80
-          ]
+          "enum": [16, 20, 24, 32, 40, 48, 64, 80]
         },
         "url": {
           "$ref": "#/definitions/httpsUrl",
@@ -1895,10 +1652,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "size",
-        "url"
-      ]
+      "required": ["size", "url"]
     },
     "extensionAutoRunEventsArray": {
       "type": "array",
@@ -1932,31 +1686,20 @@
                   "properties": {
                     "sendMode": {
                       "type": "string",
-                      "enum": [
-                        "promptUser",
-                        "softBlock",
-                        "block"
-                      ]
+                      "enum": ["promptUser", "softBlock", "block"]
                     }
                   },
                   "additionalProperties": false,
-                  "required": [
-                    "sendMode"
-                  ]
+                  "required": ["sendMode"]
                 }
               },
               "additionalProperties": false,
-              "required": [
-                "type",
-                "actionId"
-              ]
+              "required": ["type", "actionId"]
             }
           }
         },
         "additionalProperties": false,
-        "required": [
-          "events"
-        ]
+        "required": ["events"]
       }
     },
     "extensionAlternateVersionsArray": {
@@ -1982,9 +1725,7 @@
                   }
                 },
                 "additionalProperties": false,
-                "required": [
-                  "progId"
-                ]
+                "required": ["progId"]
               }
             },
             "minProperties": 1
@@ -2007,10 +1748,7 @@
                   }
                 },
                 "additionalProperties": false,
-                "required": [
-                  "officeAddinId",
-                  "assetId"
-                ]
+                "required": ["officeAddinId", "assetId"]
               },
               "customOfficeAddin": {
                 "type": "object",
@@ -2022,9 +1760,7 @@
                   }
                 },
                 "additionalProperties": false,
-                "required": [
-                  "officeAddinId"
-                ]
+                "required": ["officeAddinId"]
               }
             },
             "minProperties": 1
@@ -2040,10 +1776,7 @@
                 "$ref": "#/definitions/extensionCommonIcon"
               }
             },
-            "required": [
-              "icon",
-              "highResolutionIcon"
-            ]
+            "required": ["icon", "highResolutionIcon"]
           }
         },
         "minProperties": 1,
@@ -2063,9 +1796,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "page"
-      ]
+      "required": ["page"]
     },
     "dashboardCard": {
       "type": "object",
@@ -2097,7 +1828,7 @@
         },
         "defaultSize": {
           "type": "string",
-          "enum": [ "medium", "large" ],
+          "enum": ["medium", "large"],
           "description": "Rendering Size for dashboard card."
         }
       },
@@ -2134,7 +1865,7 @@
       "properties": {
         "sourceType": {
           "type": "string",
-          "enum": [ "bot" ],
+          "enum": ["bot"],
           "description": "The content of the dashboard card is sourced from a bot."
         },
         "botConfiguration": {
@@ -2164,10 +1895,7 @@
         }
       },
       "description": "A reference to a declarative agent element. The element's definition is in a separate file.",
-      "required": [
-        "id",
-        "file"
-      ],
+      "required": ["id", "file"],
       "additionalProperties": false
     }
   }

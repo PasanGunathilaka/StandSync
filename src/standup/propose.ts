@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { logger, type Logger } from '../logger.js';
 import type { IssueLookup } from '../jira/issues.js';
-import { resolveStatusChange, type StatusConfig } from '../jira/statusMap.js';
+import {
+  resolveStatusChange,
+  statusesForProject,
+  type StatusConfig,
+  type StatusOverrides,
+} from '../jira/statusMap.js';
+import { projectKeyOf } from './extractKeys.js';
 import type {
   InterpretationResult,
   Proposal,
@@ -27,7 +33,10 @@ export const LOW_CONFIDENCE_THRESHOLD = 0.6;
 export interface ProposeParams {
   interpretation: InterpretationResult;
   lookups: IssueLookup[];
+  /** Default workflow status names, used for any project without an override. */
   statuses: StatusConfig;
+  /** Optional per-project status names, keyed by project key (e.g. "BCPM"). */
+  statusOverrides?: StatusOverrides;
   log?: Logger;
   batchId?: string;
   /** Injectable so tests get stable proposal ids. */
@@ -35,19 +44,27 @@ export interface ProposeParams {
 }
 
 export function buildProposals(params: ProposeParams): Proposal[] {
-  const { interpretation, lookups, statuses } = params;
+  const { interpretation, lookups, statuses, statusOverrides = {} } = params;
   const idFactory = params.idFactory ?? randomUUID;
   const log = (params.log ?? logger).child({ batchId: params.batchId, stage: 'propose' });
 
   const byKey = new Map(lookups.map((l) => [l.key, l]));
 
+  // Statuses are resolved per ticket, not once per batch: one standup can name
+  // tickets from several projects, each with its own workflow vocabulary.
   const proposals = interpretation.tickets.map((ticket) =>
-    buildOne(ticket, byKey.get(ticket.key), statuses, idFactory),
+    buildOne(
+      ticket,
+      byKey.get(ticket.key),
+      statusesForProject(projectKeyOf(ticket.key), statuses, statusOverrides),
+      idFactory,
+    ),
   );
 
   log.info(
     {
       proposalCount: proposals.length,
+      projects: [...new Set(interpretation.tickets.map((t) => projectKeyOf(t.key)))],
       summary: proposals.map((p) => `${p.key}:${describeActions(p.actions)}`),
     },
     'proposals built',

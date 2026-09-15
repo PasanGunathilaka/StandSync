@@ -116,7 +116,7 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
   logger.info(
-    { port: config.PORT, provider: config.LLM_PROVIDER, jira: config.JIRA_PROJECT_KEY },
+    { port: config.PORT, provider: config.LLM_PROVIDER, jira: config.JIRA_BASE_URL },
     'StandSync listening',
   );
 }

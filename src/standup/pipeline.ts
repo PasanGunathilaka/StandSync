@@ -100,6 +100,7 @@ export async function runStandupPipeline(
       inProgress: config.STATUS_IN_PROGRESS,
       todo: config.STATUS_TODO,
     },
+    statusOverrides: config.JIRA_STATUS_OVERRIDES,
     batchId,
     log: deps.log,
   });

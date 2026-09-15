@@ -17,6 +17,9 @@ import { getConfig } from '../src/config.js';
 
 const SRC = 'appPackage';
 const BUILD = 'appPackage/build';
+/** The three files that become the ZIP root. Kept in its own folder so the
+ *  archive is never written into the directory being archived. */
+const STAGE = 'appPackage/build/pkg';
 const ZIP = 'appPackage/build/standsync-teams.zip';
 
 /** Supported manifest schema range, per the Teams manifest documentation. */
@@ -116,6 +119,54 @@ function validate(manifest: Manifest): string[] {
   return problems;
 }
 
+/**
+ * Reopens the finished ZIP and asserts the layout Teams requires: exactly the
+ * three files, at the root, with no directory component. Catching this here
+ * turns a confusing "ManifestFileNotFound" in the Teams UI into a local failure.
+ */
+function verifyZipLayout(): void {
+  const required = ['manifest.json', 'color.png', 'outline.png'];
+  const buf = readFileSync(ZIP);
+  const names: string[] = [];
+
+  // Walk local file headers; each begins with the PK\003\004 signature.
+  let off = 0;
+  while (off + 30 <= buf.length && buf.readUInt32LE(off) === 0x04034b50) {
+    const flags = buf.readUInt16LE(off + 6);
+    const csize = buf.readUInt32LE(off + 18);
+    const nlen = buf.readUInt16LE(off + 26);
+    const elen = buf.readUInt16LE(off + 28);
+    names.push(buf.subarray(off + 30, off + 30 + nlen).toString('utf8'));
+    // Bit 3 means sizes live in a trailing descriptor, so the walk cannot continue.
+    if (flags & 0x08) {
+      throw new Error(
+        'ZIP uses streaming data descriptors, which Teams may reject. Rebuild with ZipFile.',
+      );
+    }
+    off += 30 + nlen + elen + csize;
+  }
+
+  const problems: string[] = [];
+  for (const name of names) {
+    if (name.includes('/') || name.includes('\\')) {
+      problems.push(`"${name}" is nested in a folder — Teams needs it at the root`);
+    }
+  }
+  for (const want of required) {
+    if (!names.includes(want)) problems.push(`${want} is missing from the ZIP root`);
+  }
+
+  if (problems.length) {
+    throw new Error(
+      `ZIP layout is wrong — Teams would report ManifestFileNotFound:\n${problems
+        .map((p) => `  - ${p}`)
+        .join('\n')}\n  entries found: ${names.join(', ') || '(none)'}`,
+    );
+  }
+
+  console.log(`ZIP layout verified — ${names.length} entries at root: ${names.join(', ')}`);
+}
+
 function main(): void {
   const config = getConfig();
 
@@ -152,21 +203,34 @@ function main(): void {
 
   rmSync(BUILD, { recursive: true, force: true });
   mkdirSync(BUILD, { recursive: true });
-  writeFileSync(`${BUILD}/manifest.json`, rendered);
+  mkdirSync(STAGE, { recursive: true });
+  writeFileSync(`${STAGE}/manifest.json`, rendered);
   for (const icon of ['color.png', 'outline.png']) {
-    writeFileSync(`${BUILD}/${icon}`, readFileSync(`${SRC}/${icon}`));
+    writeFileSync(`${STAGE}/${icon}`, readFileSync(`${SRC}/${icon}`));
   }
 
-  // Teams requires the manifest and icons at the ZIP root, not inside a folder.
+  // Teams requires manifest.json and both icons at the ZIP ROOT. A top-level
+  // folder is the usual cause of "ManifestFileNotFound" at upload.
+  //
+  // Built with .NET's ZipFile rather than Compress-Archive: across PowerShell
+  // versions Compress-Archive has written entry names with backslash separators
+  // and streaming data descriptors, both of which strict unzip implementations
+  // reject. CreateFromDirectory with includeBaseDirectory=false puts the three
+  // files at the root with conventional headers.
   execFileSync(
     'powershell',
     [
       '-NoProfile',
       '-Command',
-      `Compress-Archive -Path '${BUILD}/manifest.json','${BUILD}/color.png','${BUILD}/outline.png' -DestinationPath '${ZIP}' -Force`,
+      'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
+        `[System.IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path '${STAGE}').Path, ` +
+        `(Join-Path (Resolve-Path '${BUILD}').Path 'standsync-teams.zip'), ` +
+        '[System.IO.Compression.CompressionLevel]::Optimal, $false)',
     ],
     { stdio: 'inherit' },
   );
+
+  verifyZipLayout();
 
   console.log(`\nManifest validated (schema ${manifest.manifestVersion}) and packaged.`);
   console.log(`  ZIP:          ${ZIP}`);

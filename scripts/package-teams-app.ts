@@ -13,7 +13,33 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import AjvModule from 'ajv-draft-04';
+import addFormatsModule from 'ajv-formats';
 import { getConfig } from '../src/config.js';
+
+/**
+ * The Teams manifest schema is authored against JSON Schema draft-04, so the
+ * draft-04 build of ajv is required. ajv is CommonJS, so under nodenext its
+ * default import types as the module namespace even though Node hands back the
+ * constructor at runtime. These are the minimal shapes this script uses.
+ */
+interface SchemaError {
+  instancePath?: string;
+  message?: string;
+  keyword?: string;
+  params?: { additionalProperty?: string };
+}
+interface CompiledSchema {
+  (data: unknown): boolean;
+  errors?: SchemaError[] | null;
+}
+interface AjvInstance {
+  compile(schema: unknown): CompiledSchema;
+}
+type AjvConstructor = new (opts?: { allErrors?: boolean; strict?: boolean }) => AjvInstance;
+
+const AjvDraft04 = AjvModule as unknown as AjvConstructor;
+const addFormats = addFormatsModule as unknown as (ajv: AjvInstance) => void;
 
 const SRC = 'appPackage';
 const BUILD = 'appPackage/build';
@@ -32,7 +58,6 @@ interface Manifest {
   manifestVersion?: string;
   version?: string;
   id?: string;
-  packageName?: string;
   name?: { short?: string; full?: string };
   description?: { short?: string; full?: string };
   accentColor?: string;
@@ -65,10 +90,6 @@ function validate(manifest: Manifest): string[] {
   check(
     /^\d+\.\d+\.\d+$/.test(manifest.version ?? ''),
     `version must be x.y.z, got "${manifest.version}"`,
-  );
-  check(
-    /^[a-z0-9.]+$/i.test(manifest.packageName ?? ''),
-    'packageName must be a reverse-domain identifier',
   );
 
   // Teams truncates or rejects these; the limits are documented per field.
@@ -117,6 +138,44 @@ function validate(manifest: Manifest): string[] {
   }
 
   return problems;
+}
+
+/**
+ * Validates the manifest against the real Microsoft schema for the version it
+ * declares — the same document Teams validates against at upload.
+ *
+ * The schema is vendored (appPackage/schema/) rather than fetched, so packaging
+ * works offline and the result is reproducible. `additionalProperties` is false
+ * throughout, so this is what catches a property that is merely obsolete rather
+ * than malformed — `packageName`, for instance, was valid in older manifests and
+ * is rejected outright from 1.19 onward.
+ */
+function validateAgainstSchema(manifest: Manifest): string[] {
+  const declared = manifest.manifestVersion ?? '';
+  const schemaPath = `${SRC}/schema/MicrosoftTeams.v${declared}.schema.json`;
+
+  if (!existsSync(schemaPath)) {
+    throw new Error(
+      `No vendored schema for manifestVersion ${declared} (expected ${schemaPath}).\n` +
+        `Download it from https://developer.microsoft.com/json-schemas/teams/v${declared}/MicrosoftTeams.schema.json`,
+    );
+  }
+
+  const schema: unknown = JSON.parse(readFileSync(schemaPath, 'utf8'));
+  const ajv = new AjvDraft04({ allErrors: true, strict: false });
+  addFormats(ajv);
+
+  const validateFn = ajv.compile(schema);
+  if (validateFn(manifest)) return [];
+
+  return (validateFn.errors ?? []).map((e) => {
+    const where = e.instancePath || '(root)';
+    const extra =
+      e.keyword === 'additionalProperties'
+        ? ` — "${String((e.params as { additionalProperty?: string }).additionalProperty)}" is not defined in schema ${declared}`
+        : '';
+    return `${where}: ${e.message ?? 'invalid'}${extra}`;
+  });
 }
 
 /**
@@ -192,7 +251,10 @@ function main(): void {
   if (unresolved) throw new Error(`Unresolved placeholder in manifest: ${unresolved[0]}`);
 
   const manifest = JSON.parse(rendered) as Manifest;
-  const problems = validate(manifest);
+
+  // Two layers: the official schema (authoritative), then our own checks for
+  // things the schema cannot see, such as the icons' pixel dimensions.
+  const problems = [...validateAgainstSchema(manifest), ...validate(manifest)];
   if (problems.length) {
     throw new Error(
       `Manifest would be rejected by Teams — ${problems.length} problem(s):\n${problems
@@ -200,6 +262,7 @@ function main(): void {
         .join('\n')}`,
     );
   }
+  console.log(`Schema validation passed against vendored v${manifest.manifestVersion} schema.`);
 
   rmSync(BUILD, { recursive: true, force: true });
   mkdirSync(BUILD, { recursive: true });

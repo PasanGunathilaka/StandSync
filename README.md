@@ -1,12 +1,12 @@
-<p align="center">
+<p align="left">
   <img src="docs/assets/standsync-logo-horizontal.png" alt="StandSync" width="760" />
 </p>
 
-<p align="center">
-  <em>"Your team talks. Jira stays current."</em>
+<p align="left">
+  <strong>"Your team talks. Jira stays current."</strong>
 </p>
 
-<p align="center">
+<p align="left">
   <strong>Claude-powered standup automation for Microsoft Teams and Jira.</strong><br/>
   Turn a normal standup message into reviewed Jira updates — without making developers enter the same information twice.
 </p>

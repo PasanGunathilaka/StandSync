@@ -7,7 +7,7 @@ import {
   SYSTEM_PROMPT,
 } from '../src/standup/prompts.js';
 import { MockLLMClient, heuristicInterpretation } from '../src/llm/mock.js';
-import { ClaudeCodeLLMClient } from '../src/llm/claudeCode.js';
+import { ClaudeCodeLLMClient, describeCliFailure } from '../src/llm/claudeCode.js';
 import { LLMError, LLMTimeoutError, type LLMClient } from '../src/llm/types.js';
 import type { IssueLookup } from '../src/jira/issues.js';
 import type { Intent, InterpretationResult } from '../src/types.js';
@@ -702,5 +702,48 @@ describe('tool-contract check does not cache failures', () => {
     // Third call reuses the cached success — no further --help spawns.
     await expect(llm.complete(req)).resolves.toBeDefined();
     expect(calls).toBe(2);
+  });
+});
+
+/**
+ * On failure the Claude CLI exits non-zero, leaves stderr EMPTY, and reports the
+ * reason on stdout as its JSON envelope. Reading only the exit code and stderr
+ * therefore threw away the diagnosis and surfaced a bare "exited with code 1",
+ * which is exactly what made a real failure impossible to debug.
+ */
+describe('describeCliFailure', () => {
+  it('surfaces the CLI reason and API status from stdout', () => {
+    const stdout = JSON.stringify({
+      type: 'result',
+      is_error: true,
+      api_error_status: 404,
+      result: "There's an issue with the selected model (not-a-real-model).",
+    });
+    const msg = describeCliFailure(1, stdout, '');
+
+    expect(msg).toContain('exited with code 1');
+    expect(msg).toContain('API status 404');
+    expect(msg).toContain('issue with the selected model');
+  });
+
+  it('falls back to stderr when stdout carries nothing useful', () => {
+    expect(describeCliFailure(1, '', 'command not recognised')).toContain('command not recognised');
+  });
+
+  it('falls back to raw stdout when it is not the JSON envelope', () => {
+    expect(describeCliFailure(1, 'total meltdown', '')).toContain('total meltdown');
+  });
+
+  it('still reports the exit code when there is no output at all', () => {
+    expect(describeCliFailure(1, '', '')).toBe('Claude Code exited with code 1');
+  });
+
+  it('reports the subtype when the envelope has no result text', () => {
+    const stdout = JSON.stringify({ type: 'result', is_error: true, subtype: 'error_max_turns' });
+    expect(describeCliFailure(1, stdout, '')).toContain('error_max_turns');
+  });
+
+  it('handles a null exit code without printing "null" as the whole message', () => {
+    expect(describeCliFailure(null, '', '')).toBe('Claude Code exited with code null');
   });
 });

@@ -321,14 +321,7 @@ export class ClaudeCodeLLMClient implements LLMClient {
           return;
         }
         if (code !== 0) {
-          finish(() =>
-            reject(
-              new LLMError(
-                `Claude Code exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ''}`,
-                this.name,
-              ),
-            ),
-          );
+          finish(() => reject(new LLMError(describeCliFailure(code, stdout, stderr), this.name)));
           return;
         }
         finish(() => resolve(stdout));
@@ -341,6 +334,49 @@ export class ClaudeCodeLLMClient implements LLMClient {
       child.stdin.end(stdinContent, 'utf8');
     });
   }
+}
+
+/**
+ * Builds a useful message for a non-zero CLI exit.
+ *
+ * On failure the CLI exits 1, writes **nothing to stderr**, and reports the
+ * reason on **stdout** as its normal JSON envelope with `is_error: true` — for
+ * example an unusable model gives `api_error_status: 404` and "There's an issue
+ * with the selected model". Reading only the exit code and stderr therefore
+ * discards the one piece of information that explains the failure, which is why
+ * this used to surface as a bare "Claude Code exited with code 1".
+ */
+export function describeCliFailure(code: number | null, stdout: string, stderr: string): string {
+  const prefix = `Claude Code exited with code ${code ?? 'null'}`;
+
+  const trimmed = stdout.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const envelope = JSON.parse(trimmed) as {
+        result?: unknown;
+        subtype?: unknown;
+        api_error_status?: unknown;
+      };
+      const detail = typeof envelope.result === 'string' ? envelope.result.trim() : '';
+      const status =
+        typeof envelope.api_error_status === 'number'
+          ? ` (API status ${envelope.api_error_status})`
+          : '';
+      const subtype =
+        !detail && typeof envelope.subtype === 'string' ? ` (${envelope.subtype})` : '';
+      if (detail || status || subtype) {
+        return `${prefix}${status}: ${detail || subtype.trim() || 'no detail provided'}`.slice(
+          0,
+          600,
+        );
+      }
+    } catch {
+      // Not the JSON envelope after all; fall through to the raw output below.
+    }
+  }
+
+  const fallback = stderr.trim() || trimmed;
+  return fallback ? `${prefix}: ${fallback.slice(0, 500)}` : prefix;
 }
 
 /**

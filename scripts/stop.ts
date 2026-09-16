@@ -1,86 +1,41 @@
 /**
  * Stops anything this project left running: the StandSync server (including a
- * `tsx watch` supervisor) and the dev tunnel host.
+ * `tsx watch` supervisor), the demo orchestrator, and the dev tunnel host.
  *
  * `npm run demo` cleans up on Ctrl+C, but a closed terminal or a crashed session
  * can leave a supervisor behind that immediately respawns a child on port 3978 —
  * which then looks like "the port is mysteriously in use". This clears that
- * reliably, and only ever touches processes belonging to this project.
+ * reliably, and only ever touches this project's long-running processes.
  */
-import { execFileSync } from 'node:child_process';
+import {
+  DEFAULT_TUNNEL_ID,
+  describeProcess,
+  isOurLongRunningProcess,
+  killTree,
+  listProcesses,
+} from './lib/processes.js';
 
-interface Proc {
-  pid: number;
-  name: string;
-  commandLine: string;
-}
+const tunnelId = process.env['DEVTUNNEL_ID'] ?? DEFAULT_TUNNEL_ID;
+const match = (p: Parameters<typeof isOurLongRunningProcess>[0]): boolean =>
+  isOurLongRunningProcess(p, { tunnelId, selfPid: process.pid });
 
-function listProcesses(): Proc[] {
-  const out = execFileSync(
-    'powershell',
-    [
-      '-NoProfile',
-      '-Command',
-      "Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('node.exe','devtunnel.exe') } | " +
-        'ForEach-Object { "$($_.ProcessId)|$($_.Name)|$($_.CommandLine)" }',
-    ],
-    { encoding: 'utf8', timeout: 30_000 },
-  );
-
-  return out
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => {
-      const [pid, name, ...rest] = l.split('|');
-      return { pid: Number(pid), name: name ?? '', commandLine: rest.join('|') };
-    });
-}
-
-function killTree(pid: number): boolean {
-  try {
-    execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const TUNNEL_ID = process.env['DEVTUNNEL_ID'] ?? 'standsync';
-
-const procs = listProcesses();
-
-// Only this project's processes. Other Node apps on this machine are left alone.
-const targets = procs.filter(
-  (p) =>
-    /StandSync|HeartForge/i.test(p.commandLine) ||
-    (p.name === 'devtunnel.exe' && p.commandLine.includes(TUNNEL_ID)),
-);
+const targets = listProcesses().filter(match);
 
 if (targets.length === 0) {
-  console.log('\nNothing to stop — no StandSync or dev tunnel processes are running.\n');
+  console.log('\nNothing to stop — no StandSync server, demo or dev tunnel is running.\n');
   process.exit(0);
 }
 
 console.log('\nStopping StandSync development processes:\n');
 for (const t of targets) {
-  const kind =
-    t.name === 'devtunnel.exe'
-      ? 'dev tunnel'
-      : /watch/.test(t.commandLine)
-        ? 'tsx watch'
-        : 'server';
+  const stopped = killTree(t.pid);
   console.log(
-    `  ${killTree(t.pid) ? 'stopped' : 'gone   '}  PID ${String(t.pid).padEnd(7)} ${kind}`,
+    `  ${stopped ? 'stopped' : 'gone   '}  PID ${String(t.pid).padEnd(7)} ${describeProcess(t)}`,
   );
 }
 
 setTimeout(() => {
-  const left = listProcesses().filter(
-    (p) =>
-      /StandSync|HeartForge/i.test(p.commandLine) ||
-      (p.name === 'devtunnel.exe' && p.commandLine.includes(TUNNEL_ID)),
-  );
+  const left = listProcesses().filter(match);
   console.log(
     left.length === 0 ? '\nAll clear.\n' : `\n${left.length} process(es) still running.\n`,
   );

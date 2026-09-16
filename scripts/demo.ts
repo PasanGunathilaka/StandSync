@@ -10,7 +10,7 @@
  * It deliberately starts nothing until every check passes: a demo that half
  * starts is worse than one that refuses to.
  */
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -27,6 +27,7 @@ import {
   whoHasPort,
   type CheckResult,
 } from './lib/preflight.js';
+import { killTree } from './lib/processes.js';
 
 const TUNNEL_ID = process.env['DEVTUNNEL_ID'] ?? 'standsync';
 const children: ChildProcess[] = [];
@@ -34,16 +35,6 @@ let shuttingDown = false;
 
 function line(char = '─'): void {
   console.log(char.repeat(72));
-}
-
-/** Kills a process and everything it spawned; a bare kill leaves grandchildren. */
-function killTree(pid: number | undefined): void {
-  if (pid === undefined) return;
-  try {
-    execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
-  } catch {
-    /* already gone */
-  }
 }
 
 function shutdown(reason: string, code = 0): never | void {

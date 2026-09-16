@@ -88,6 +88,12 @@ const ConfigSchema = z.object({
   MICROSOFT_APP_PASSWORD: z.string().trim().default(''),
   MICROSOFT_APP_TENANT_ID: z.string().trim().default(''),
   TEAMS_ALLOWED_CONVERSATION_ID: z.string().trim().default(''),
+  /**
+   * Public HTTPS base URL Teams posts to (the dev tunnel URL, no trailing path).
+   * Optional, but when set `npm run demo` checks the live tunnel matches it, which
+   * catches the case where the tunnel URL changed and the bot registration did not.
+   */
+  TEAMS_PUBLIC_URL: z.string().trim().default(''),
   TEAMS_MESSAGING_ENDPOINT: z
     .string()
     .trim()

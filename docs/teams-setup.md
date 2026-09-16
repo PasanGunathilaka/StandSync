@@ -20,6 +20,9 @@ curl / dev:post ──────▶│ /dev/standup  ────────�
 Both entry points call the **same** `runStandupPipeline` and `executeBatch`, so
 the fallback demo path cannot drift from the real one.
 
+> **Daily use:** once set up, the whole environment starts with **`npm run demo`**.
+> See [demo-runbook.md](demo-runbook.md). The steps below are first-time setup.
+
 ## Prerequisites
 
 ```powershell

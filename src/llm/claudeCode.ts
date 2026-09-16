@@ -222,7 +222,16 @@ export class ClaudeCodeLLMClient implements LLMClient {
    * If the contract has changed, fail closed rather than assume tools are off.
    */
   private verifyToolSuppressionSupported(): Promise<void> {
-    this.toolContractCheck ??= this.checkToolContract();
+    // Memoize the *success* only. Caching the promise unconditionally would let a
+    // single transient failure — a spawn hiccup under load, a momentary timeout —
+    // poison the client for the lifetime of the process, so every later standup
+    // would fall back to `unclear` even though the CLI had recovered. Clearing the
+    // slot on rejection keeps the check fail-closed for this call while allowing
+    // the next one to retry.
+    this.toolContractCheck ??= this.checkToolContract().catch((err: unknown) => {
+      this.toolContractCheck = undefined;
+      throw err;
+    });
     return this.toolContractCheck;
   }
 

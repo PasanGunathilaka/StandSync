@@ -658,3 +658,49 @@ describe('tool-suppression guardrail (offline)', () => {
     expect((err as Error).message).toContain('Refusing to run');
   });
 });
+
+/**
+ * The tool-contract preflight is memoized so it runs once per client. Caching a
+ * *failure* would poison the client for the lifetime of the process: one
+ * transient spawn hiccup and every later standup falls back to `unclear`, even
+ * though the CLI recovered seconds later. This was a real production symptom.
+ */
+describe('tool-contract check does not cache failures', () => {
+  it('retries the contract check after a failure instead of caching the rejection', async () => {
+    const llm = new ClaudeCodeLLMClient({ model: 'claude-sonnet-5' });
+
+    let calls = 0;
+    // Stand in for the CLI: fail once, then behave. `run` is the single place the
+    // provider shells out, so overriding it exercises the real memoization path.
+    const fakeRun = (args: string[]): Promise<string> => {
+      if (args[0] === '--help') {
+        calls++;
+        if (calls === 1) return Promise.reject(new Error('transient spawn failure'));
+        return Promise.resolve('--tools <tools...>  Use "" to disable all tools');
+      }
+      return Promise.resolve(
+        JSON.stringify({ type: 'result', is_error: false, structured_output: { ok: true } }),
+      );
+    };
+    (llm as unknown as { run: typeof fakeRun }).run = fakeRun;
+
+    const req = {
+      systemPrompt: 'x',
+      userMessage: 'y',
+      jsonSchema: {},
+      timeoutMs: 5_000,
+    };
+
+    // First call fails closed — the contract could not be verified.
+    await expect(llm.complete(req)).rejects.toBeInstanceOf(LLMError);
+    expect(calls).toBe(1);
+
+    // Second call must re-check rather than replay the cached rejection.
+    await expect(llm.complete(req)).resolves.toMatchObject({ data: { ok: true } });
+    expect(calls).toBe(2);
+
+    // Third call reuses the cached success — no further --help spawns.
+    await expect(llm.complete(req)).resolves.toBeDefined();
+    expect(calls).toBe(2);
+  });
+});

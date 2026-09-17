@@ -6,6 +6,7 @@ import { ApprovalStore } from './approval/store.js';
 import { JiraClient } from './jira/client.js';
 import { JiraIssues } from './jira/issues.js';
 import { JiraActions } from './jira/actions.js';
+import { JiraContextService } from './jira/context.js';
 import { createLLMClient } from './llm/index.js';
 import { registerDevRoutes } from './dev/routes.js';
 import { createTeamsApp, isTeamsConfigured } from './teams/app.js';
@@ -19,6 +20,8 @@ export interface AppContext {
   store: ApprovalStore;
   issues: JiraIssues;
   actions: JiraActions;
+  /** V2: deterministic, sanitized Jira reads for the agent layer. */
+  jiraContext: JiraContextService;
   llm: LLMClient;
 }
 
@@ -30,11 +33,17 @@ export function buildContext(config: Config): AppContext {
     apiToken: config.JIRA_API_TOKEN,
   });
 
+  const issues = new JiraIssues(client);
+
   return {
     config,
     store: ApprovalStore.open(config.DATABASE_PATH),
-    issues: new JiraIssues(client),
+    issues,
     actions: new JiraActions(client),
+    // Note what this is constructed with: the Jira *client* and the *reads*
+    // service. JiraActions is deliberately not passed, so nothing reachable
+    // from the agent layer holds a Jira write capability.
+    jiraContext: new JiraContextService({ client, issues }),
     llm: createLLMClient(config),
   };
 }
@@ -49,6 +58,7 @@ export function buildServer(ctx: AppContext) {
     env: ctx.config.NODE_ENV,
     provider: ctx.config.LLM_PROVIDER,
     model: ctx.config.ANTHROPIC_MODEL,
+    ambientMode: ctx.config.STANDSYNC_AMBIENT_MODE,
   }));
 
   // Dev endpoints drive the same pipeline as Teams, so the product stays
@@ -59,6 +69,7 @@ export function buildServer(ctx: AppContext) {
       store: ctx.store,
       issues: ctx.issues,
       actions: ctx.actions,
+      jiraContext: ctx.jiraContext,
       llm: ctx.llm,
     });
   }
@@ -86,6 +97,7 @@ export async function attachTeams(app: StandSyncServer, ctx: AppContext): Promis
     store: ctx.store,
     issues: ctx.issues,
     actions: ctx.actions,
+    context: ctx.jiraContext,
     llm: ctx.llm,
   });
 
@@ -116,7 +128,12 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
   logger.info(
-    { port: config.PORT, provider: config.LLM_PROVIDER, jira: config.JIRA_BASE_URL },
+    {
+      port: config.PORT,
+      provider: config.LLM_PROVIDER,
+      jira: config.JIRA_BASE_URL,
+      ambientMode: config.STANDSYNC_AMBIENT_MODE,
+    },
     'StandSync listening',
   );
 }

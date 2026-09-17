@@ -88,6 +88,40 @@ const ConfigSchema = z.object({
   MICROSOFT_APP_PASSWORD: z.string().trim().default(''),
   MICROSOFT_APP_TENANT_ID: z.string().trim().default(''),
   TEAMS_ALLOWED_CONVERSATION_ID: z.string().trim().default(''),
+
+  /**
+   * V2 ambient listening. When false (the default), StandSync keeps the V1
+   * behaviour: it only acts on messages delivered to it, which in a channel means
+   * @mentions. When true, StandSync observes every message in the allow-listed
+   * conversations and decides for itself which ones are relevant.
+   *
+   * Off by default on purpose: receiving every channel message requires the
+   * ChannelMessage.Read.Group RSC grant, and a bot that mutates Jira should not
+   * start listening to a whole channel because someone upgraded a dependency.
+   */
+  STANDSYNC_AMBIENT_MODE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  /**
+   * Conversations ambient mode may observe, as a comma-separated list of Teams
+   * conversation ids. TEAMS_ALLOWED_CONVERSATION_ID is always included, so a
+   * single-channel deployment needs nothing here.
+   *
+   * There is deliberately no "all channels" value: ambient listening is opt-in
+   * per conversation.
+   */
+  STANDSYNC_AMBIENT_CONVERSATION_IDS: z
+    .string()
+    .trim()
+    .default('')
+    .transform((raw) =>
+      raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
   /**
    * Public HTTPS base URL Teams posts to (the dev tunnel URL, no trailing path).
    * Optional, but when set `npm run demo` checks the live tunnel matches it, which
@@ -110,6 +144,28 @@ const ConfigSchema = z.object({
 
   APPROVAL_POLICY: z.enum(['author_only', 'anyone']).default('anyone'),
   STALE_DAYS: z.coerce.number().int().positive().default(5),
+
+  /**
+   * V2 decision policy thresholds. Centralised here and read only by
+   * src/policy/decision-policy.ts, so there is exactly one place that decides
+   * "propose / review / clarify / stay silent".
+   */
+  // At or above this, a valid low-risk proposal is pre-selected on the card.
+  POLICY_AUTO_SELECT_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
+  // Below this, StandSync asks the developer instead of guessing.
+  POLICY_CLARIFY_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.5),
+  // Classifier confidence needed to let an ambient message into the pipeline.
+  POLICY_RELEVANCE_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
+
+  /** Per-agent LLM ceiling. Shorter than LLM_TIMEOUT_MS: these are small calls. */
+  AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
+
+  /**
+   * Thread context bounds. StandSync never sends channel history to Claude
+   * wholesale — only this many recent messages from the same conversation/thread.
+   */
+  CONTEXT_MESSAGE_LIMIT: z.coerce.number().int().min(0).max(20).default(5),
+  CONTEXT_WINDOW_MINUTES: z.coerce.number().int().positive().default(120),
 
   DATABASE_PATH: z.string().trim().min(1).default('./data/standsync.db'),
 

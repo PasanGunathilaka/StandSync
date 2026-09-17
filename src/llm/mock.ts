@@ -53,7 +53,7 @@ export class MockLLMClient implements LLMClient {
 
     const behavior = this.script.length
       ? (this.script[Math.min(this.callIndex, this.script.length - 1)] as MockBehavior)
-      : ({ kind: 'data', data: heuristicInterpretation(req.userMessage) } as MockBehavior);
+      : ({ kind: 'data', data: heuristicResponse(req) } as MockBehavior);
     this.callIndex++;
 
     if (behavior.kind === 'timeout')
@@ -64,6 +64,143 @@ export class MockLLMClient implements LLMClient {
       data: behavior.data,
       meta: { provider: this.name, model: this.model, durationMs: Date.now() - startedAt },
     });
+  }
+}
+
+/**
+ * Which V2 skill is being asked, inferred from the JSON schema it supplied.
+ *
+ * V1 had one prompt, so an unscripted mock could always answer with an
+ * interpretation. V2 has six, and answering a validator with an interpretation
+ * fails schema validation — which the pipeline correctly treats as a stage
+ * outage and degrades. That is right behaviour for a real failure, but it made
+ * `LLM_PROVIDER=mock` a much weaker offline demo than V1's.
+ *
+ * Routing on the schema rather than on call order means the mock stays correct
+ * if stages are reordered, and needs no knowledge of the orchestrator.
+ */
+export type MockSkillShape =
+  'classify' | 'interpret' | 'validate' | 'ambiguity' | 'blockers' | 'summary' | 'unknown';
+
+export function detectSkillShape(jsonSchema: Record<string, unknown>): MockSkillShape {
+  const properties = (jsonSchema['properties'] ?? {}) as Record<string, unknown>;
+  const has = (name: string): boolean => name in properties;
+
+  if (has('relevant') && has('type')) return 'classify';
+  if (has('changes') && has('risk')) return 'validate';
+  if (has('blockers')) return 'blockers';
+  if (has('completed') && has('inProgress')) return 'summary';
+
+  if (has('tickets')) {
+    // Both interpret-work and detect-ambiguity return `tickets`; the item shape
+    // is what distinguishes them.
+    const tickets = properties['tickets'] as { items?: { properties?: object } } | undefined;
+    const itemProperties = tickets?.items?.properties ?? {};
+    return 'ambiguous' in itemProperties ? 'ambiguity' : 'interpret';
+  }
+
+  return 'unknown';
+}
+
+/** The Jira keys a prompt said to report on, read back out of the user turn. */
+function keysFromPrompt(userMessage: string): string[] {
+  const listed = /report on exactly these \d+(?: ticket\(s\))?: ([^\n]+)/i.exec(userMessage);
+  const source = listed?.[1] ?? userMessage;
+  const keys = [...source.matchAll(/(?<![A-Za-z0-9])([A-Z][A-Z0-9]+-\d+)(?![0-9])/g)]
+    .map((m) => m[1])
+    .filter((k): k is string => Boolean(k));
+  return [...new Set(keys)];
+}
+
+/**
+ * A schema-appropriate heuristic answer for whichever stage is calling.
+ *
+ * Deliberately permissive rather than clever: the offline demo should show the
+ * happy path end to end. The validator approves, ambiguity reports none, and
+ * blockers are derived from the same keyword sets the interpreter uses. Anything
+ * genuinely ambiguous still resolves to `unclear` upstream.
+ */
+export function heuristicResponse(req: LLMRequest): unknown {
+  const shape = detectSkillShape(req.jsonSchema);
+  const keys = keysFromPrompt(req.userMessage);
+
+  switch (shape) {
+    case 'classify': {
+      // The orchestrator only calls the classifier when the deterministic fast
+      // path did not already admit the message, so answer from the text.
+      const relevant = keys.length > 0 || /\b(finish|start|block|work|done)/i.test(req.userMessage);
+      return {
+        relevant,
+        type: relevant ? 'work_update' : 'unrelated',
+        confidence: relevant ? 0.8 : 0.9,
+        reason: relevant
+          ? 'Mentions work or a ticket (offline heuristic).'
+          : 'No work content detected (offline heuristic).',
+      };
+    }
+
+    case 'validate':
+      return {
+        valid: true,
+        risk: 'low',
+        changes: keys.map((key) => ({
+          key,
+          valid: true,
+          risk: 'low',
+          warnings: [],
+          explanation: '',
+        })),
+        explanation: '',
+      };
+
+    case 'ambiguity':
+      return {
+        tickets: keys.map((key) => ({
+          key,
+          ambiguous: false,
+          question: '',
+          options: [],
+          reason: '',
+        })),
+      };
+
+    case 'blockers': {
+      const interpretation = heuristicInterpretation(req.userMessage);
+      const blocked = new Map(
+        interpretation.tickets
+          .filter((t) => t.intent === 'blocked')
+          .map((t) => [t.key, t.blockerReason ?? t.evidence]),
+      );
+
+      return {
+        blockers: keys.map((key) => {
+          const description = blocked.get(key);
+          return {
+            key,
+            blocked: description !== undefined,
+            category: description === undefined ? null : 'other',
+            description: description ?? null,
+            dependency: null,
+            severity: description === undefined ? null : 'medium',
+            needsAttention: false,
+          };
+        }),
+      };
+    }
+
+    case 'summary':
+      // Grounded by construction: the summary agent filters back to the keys it
+      // supplied, so echoing them is honest rather than invented.
+      return {
+        completed: [],
+        inProgress: keys.map((key) => ({ key, text: 'recorded offline' })),
+        blocked: [],
+        attention: [],
+      };
+
+    case 'interpret':
+    case 'unknown':
+      return heuristicInterpretation(req.userMessage);
   }
 }
 

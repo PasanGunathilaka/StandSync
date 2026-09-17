@@ -86,6 +86,9 @@ const batchOf = (proposals: Proposal[], over: Partial<ProposalBatch> = {}): Prop
 });
 
 describe('FastifyHttpServerAdapter', () => {
+  // This is the first test to construct a Fastify instance, so it pays the
+  // one-off cost of Fastify's own module initialisation. See the testTimeout
+  // note in vitest.config.ts for why the project default is above 5s.
   it('registers a POST route that bridges the SDK handler onto Fastify', async () => {
     const fastify = Fastify();
     const adapter = new FastifyHttpServerAdapter(fastify as unknown as StandSyncFastify);

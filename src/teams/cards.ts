@@ -23,9 +23,26 @@ import type { BatchExecution, Proposal, ProposalBatch } from '../types.js';
 
 export const CARD_VERSION = '1.5' as const;
 
-/** The four action verbs the card handlers accept. */
-export const CARD_ACTIONS = ['approve_all', 'review', 'apply_selected', 'reject'] as const;
+/**
+ * The action verbs the card handlers accept.
+ *
+ * The first four are the V1 approval verbs and behave identically. V2 adds
+ * `clarify` (answering a question, which produces a proposal that still needs
+ * approving) and `summary` (read-only). Neither is an approval verb, and
+ * neither reaches executeBatch.
+ */
+export const CARD_ACTIONS = [
+  'approve_all',
+  'review',
+  'apply_selected',
+  'reject',
+  'clarify',
+  'summary',
+] as const;
 export type CardActionName = (typeof CARD_ACTIONS)[number];
+
+/** The verbs that can cause a Jira write once a human has approved. */
+export const APPROVAL_ACTIONS = ['approve_all', 'apply_selected'] as const;
 
 /** Input id prefix for Review-mode toggles, so toggles are separable from other data. */
 export const TOGGLE_PREFIX = 'sel_';

@@ -36,6 +36,26 @@ export type ProposalAction =
   | { type: 'comment'; body: string }
   | { type: 'none'; reason: string };
 
+/** V2 risk grading, produced by the proposal validator. */
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+/**
+ * V2 audit metadata attached to a proposal. Every field is optional so a V1
+ * proposal (and a V1 row already in SQLite) stays a valid Proposal.
+ *
+ * Deliberately holds only concise conclusions — a verdict, a risk grade, short
+ * warnings. No chain-of-thought is stored.
+ */
+export interface ProposalReview {
+  /** Whether the validator agreed the action is justified by Jira state. */
+  validated?: boolean;
+  risk?: RiskLevel;
+  /** Short, human-readable cautions shown on the card. */
+  warnings?: string[];
+  /** True when the transition was confirmed present in the live workflow. */
+  transitionVerified?: boolean;
+}
+
 export interface Proposal {
   id: string; // uuid
   key: string;
@@ -43,9 +63,29 @@ export interface Proposal {
   confidence: number;
   explanation: string;
   selected: boolean; // for Review mode
+  /** V2 only. Absent on V1 proposals. */
+  review?: ProposalReview;
 }
 
 export type BatchStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'partial';
+
+/**
+ * V2 provenance for a batch: where the message came from and how the agent
+ * stages graded it. Optional throughout, so V1 batches remain valid.
+ */
+export interface BatchOrigin {
+  /** 'mention' = V1 directed message; 'ambient' = observed without @StandSync. */
+  source?: 'mention' | 'ambient' | 'dev' | 'clarification';
+  /** Teams thread (replyToId) when the message was part of one. */
+  threadId?: string;
+  /** What the relevance classifier concluded. */
+  classification?: MessageKind;
+  classifierConfidence?: number;
+  /** Correlates every agent_runs row for this batch. */
+  traceId?: string;
+  /** The clarification this batch was produced from, if any. */
+  clarificationId?: string;
+}
 
 export interface ProposalBatch {
   id: string;
@@ -57,7 +97,18 @@ export interface ProposalBatch {
   proposals: Proposal[];
   status: BatchStatus;
   createdAt: string;
+  /** V2 only. Absent on V1 batches. */
+  origin?: BatchOrigin;
 }
+
+/** What the relevance classifier decided an ambient message is. */
+export type MessageKind =
+  | 'standup_update'
+  | 'work_update'
+  | 'blocker'
+  | 'jira_reference'
+  | 'clarification_reply'
+  | 'unrelated';
 
 /** Outcome of applying one proposal's actions against Jira. */
 export interface ExecutionResult {

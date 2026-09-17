@@ -134,6 +134,133 @@ npm run dev
 3. Click **Approve All** → card becomes **Applying to Jira…** → then the result card.
 4. Check Jira: TES-41 Done, TES-42 In Progress, TES-43 has a `[StandSync]` comment.
 
+## 8. V2: enabling no-@mention channel listening
+
+By default StandSync only sees messages Teams delivers to it — in a channel that
+means `@StandSync`. Ambient mode makes it see every message in a named channel
+and decide for itself which ones matter.
+
+This needs **resource-specific consent (RSC)**. RSC is scoped to the one team the
+app is installed in, granted by a team owner, and does not require a
+tenant-wide Graph permission or an administrator.
+
+### 8.1 The manifest already requests it
+
+`appPackage/manifest.json` declares:
+
+```json
+"authorization": {
+  "permissions": {
+    "resourceSpecific": [
+      { "name": "ChannelMessage.Read.Group", "type": "Application" },
+      { "name": "ChatMessage.Read.Chat",     "type": "Application" }
+    ]
+  }
+}
+```
+
+- `ChannelMessage.Read.Group` — standard channel messages. **This is the one
+  that matters**; channel support is the priority.
+- `ChatMessage.Read.Chat` — group chats, so the same behaviour works there.
+
+Both are `.Read.` only. StandSync never requests permission to send or modify
+messages, and there is no `webApplicationInfo` block — that is how an app asks
+for tenant-wide Graph scopes, and StandSync does not need one.
+[test/safety.test.ts](../test/safety.test.ts) fails the build if either of those
+properties regresses.
+
+### 8.2 Re-install the app so consent is re-prompted
+
+RSC is granted at install time. An app already installed under an older manifest
+will **not** retroactively receive the grant.
+
+```powershell
+npm run teams:package
+```
+
+The manifest version is `2.0.0`. In Teams:
+
+1. **Apps → Manage your apps → StandSync → Remove** (from the team).
+2. **Upload a custom app** → `appPackage/build/standsync-teams.zip`.
+3. Add it to the team again. A **team owner** must do this — the consent is
+   granted on behalf of the team.
+
+> If you skip the removal, Teams may keep the cached older manifest and the bot
+> will keep receiving only @mentions with no error to explain why.
+
+### 8.3 Turn ambient mode on
+
+```ini
+STANDSYNC_AMBIENT_MODE=true
+TEAMS_ALLOWED_CONVERSATION_ID=19:...@thread.tacv2   # from step 6
+```
+
+To observe more than one channel, list the extra conversation ids:
+
+```ini
+STANDSYNC_AMBIENT_CONVERSATION_IDS=19:aaa@thread.tacv2,19:bbb@thread.tacv2
+```
+
+There is **no wildcard**. Ambient listening is opt-in per conversation, so
+installing the app somewhere new cannot silently start feeding that channel's
+messages into a pipeline that mutates Jira.
+
+Restart, and confirm the startup log:
+
+```
+Teams app created on the Fastify server
+  ambientMode: true
+  ambientConversations: [ '19:...@thread.tacv2' ]
+```
+
+### 8.4 Verify it, including the silence
+
+```powershell
+npm run seed:jira
+npm run dev
+```
+
+In the channel, **without mentioning the bot**:
+
+| Post this                                        | Expect                                           |
+| ------------------------------------------------ | ------------------------------------------------ |
+| `Good morning everyone`                          | **nothing** — no reply, no typing indicator      |
+| `thanks!`                                        | **nothing**                                      |
+| 👍                                               | **nothing**                                      |
+| `Anyone going for lunch?`                        | **nothing**                                      |
+| `Finished TES-41 today.`                         | proposal card, `In Progress → Done` pre-selected |
+| `TES-43 is blocked waiting for API credentials.` | comment proposed, blocker recorded               |
+| `TES-42 is basically finished.`                  | clarification card, nothing proposed             |
+
+The silence is the feature. If StandSync replies to `Good morning`, ambient
+filtering is not working — check the logs for `message_ignored` with a `reason`.
+
+### 8.5 What is still manual
+
+These cannot be automated from this repository and need a person in the tenant:
+
+1. **Upload custom apps** must be enabled — Teams admin center → Teams apps →
+   Setup policies → Global → _Upload custom apps_. Teams Administrator role.
+2. **A team owner** must install/re-install the app into the team. RSC consent is
+   granted by the owner at install time; there is no API call in this repo that
+   can grant it.
+3. **The dev tunnel URL** must match the bot's messaging endpoint. The URL
+   changes on every non-persistent `devtunnel host`.
+4. **`TEAMS_ALLOWED_CONVERSATION_ID`** has to be copied from the logs once, per
+   channel (step 6).
+
+### 8.6 Known limitations
+
+|                                     |                                                                                                                                                                                                                       |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Private channels**                | `ChannelMessage.Read.Group` does **not** cover private channels. RSC is granted per team, and a private channel has its own membership. Ambient mode will not receive messages there; `@StandSync` still works.       |
+| **Shared channels (Teams Connect)** | Not supported for ambient listening. Cross-tenant membership means the RSC grant does not extend to external participants. Treat shared channels as mention-only.                                                     |
+| **Meeting chats**                   | Not covered. Use a standard channel.                                                                                                                                                                                  |
+| **Retroactive messages**            | RSC grants a live feed, not history. Messages posted before the app was installed are never seen.                                                                                                                     |
+| **Per-team grant**                  | Installing into a second team requires that team's owner to install it and consent again.                                                                                                                             |
+| **Edits**                           | An edit is reprocessed only when the text materially changed (compared by content hash). A cosmetic edit is correctly ignored; an edit that changes meaning creates a new proposal rather than revising the old card. |
+| **Deletions**                       | A deleted message does not retract an already-posted proposal card. The batch stays `pending` and can be rejected.                                                                                                    |
+
 ## Configuration reference
 
 | Variable                        | Purpose                                                                |
@@ -146,6 +273,19 @@ npm run dev
 | `TEAMS_MESSAGING_ENDPOINT`      | Defaults to `/api/messages`.                                           |
 | `TEAMS_ALLOW_UNAUTHENTICATED`   | Local testing only. Skips Teams token validation. Never in production. |
 | `APPROVAL_POLICY`               | `anyone` (default) or `author_only`.                                   |
+
+### V2
+
+| Variable                             | Purpose                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| `STANDSYNC_AMBIENT_MODE`             | `false` (default) ⇒ V1 mention-only. `true` ⇒ observe the channels below. |
+| `STANDSYNC_AMBIENT_CONVERSATION_IDS` | Extra conversation ids to observe, comma-separated. No wildcard.          |
+| `POLICY_AUTO_SELECT_CONFIDENCE`      | At or above this, a valid low-risk change is pre-ticked. Default `0.8`.   |
+| `POLICY_CLARIFY_CONFIDENCE`          | Below this, ask the developer instead of guessing. Default `0.5`.         |
+| `POLICY_RELEVANCE_CONFIDENCE`        | Classifier confidence needed to admit an ambient message. Default `0.6`.  |
+| `AGENT_TIMEOUT_MS`                   | Per-agent LLM ceiling. Default `45000`.                                   |
+| `CONTEXT_MESSAGE_LIMIT`              | Recent thread messages sent as context. Default `5`, hard max `20`.       |
+| `CONTEXT_WINDOW_MINUTES`             | How far back thread context may reach. Default `120`.                     |
 
 ## Tenant blockers
 

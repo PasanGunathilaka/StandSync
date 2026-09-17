@@ -7,7 +7,6 @@ import type { ExecuteDeps } from '../approval/execute.js';
 import type { ApprovalStore } from '../approval/store.js';
 import { canApprove, type ApprovalPolicy } from './channelGuard.js';
 import {
-  CARD_ACTIONS,
   TOGGLE_PREFIX,
   buildErrorCard,
   buildRejectedCard,
@@ -24,11 +23,33 @@ import {
  * there is no second write path and no second idempotency mechanism.
  */
 
-/** Action payloads arrive from a client and are validated like any external input. */
-const CardActionData = z.object({
-  action: z.enum(CARD_ACTIONS),
+/**
+ * Action payloads arrive from a client and are validated like any external input.
+ *
+ * `batchId` is required for the approval verbs and absent for the V2 verbs,
+ * which address a clarification or nothing at all — so the payload is a
+ * discriminated union rather than one shape with optional fields. That way a
+ * `clarify` payload cannot smuggle in a batch id and a batch action cannot
+ * arrive without one.
+ */
+const BatchActionData = z.object({
+  action: z.enum(['approve_all', 'review', 'apply_selected', 'reject']),
   batchId: z.string().min(1),
 });
+
+const ClarifyActionData = z.object({
+  action: z.literal('clarify'),
+  clarificationId: z.string().min(1),
+  optionId: z.string().min(1),
+});
+
+const SummaryActionData = z.object({
+  action: z.literal('summary'),
+});
+
+const CardActionData = z.union([BatchActionData, ClarifyActionData, SummaryActionData]);
+
+export type ParsedCardAction = z.infer<typeof CardActionData>;
 
 export interface CardActionRequest {
   /** Raw `action.data` from the Action.Execute invoke. */
@@ -41,6 +62,21 @@ export interface CardActionDeps extends ExecuteDeps {
   store: ApprovalStore;
   approvalPolicy: ApprovalPolicy;
   log?: Logger;
+  /**
+   * V2 handlers, injected so this module keeps no dependency on the agent layer.
+   *
+   * `onClarify` answers a clarification and returns the card to show. It is
+   * wired to resolveClarification(), which produces a *pending* batch — so a
+   * clarification click cannot reach executeBatch, by construction rather than
+   * by convention.
+   */
+  onClarify?: (request: {
+    clarificationId: string;
+    optionId: string;
+    answeredBy: string;
+    answeredByName: string;
+  }) => Promise<IAdaptiveCard>;
+  onSummary?: () => Promise<IAdaptiveCard>;
 }
 
 export interface CardActionOutcome {
@@ -52,7 +88,7 @@ export interface CardActionOutcome {
 }
 
 /** Parses and validates an action payload. Returns null when it is not ours. */
-export function parseCardAction(data: unknown): { action: CardActionName; batchId: string } | null {
+export function parseCardAction(data: unknown): ParsedCardAction | null {
   const parsed = CardActionData.safeParse(data);
   return parsed.success ? parsed.data : null;
 }
@@ -88,6 +124,32 @@ export async function handleCardAction(
         'Unrecognised action',
         'StandSync could not read that button. Please post your standup again.',
       ),
+    };
+  }
+
+  // V2 verbs first. Neither approves anything, so neither consults the approval
+  // policy or touches executeBatch.
+  if (parsed.action === 'summary') {
+    log.info('team summary requested');
+    if (!deps.onSummary) {
+      return { card: buildErrorCard('Not available', 'Summaries are not enabled.') };
+    }
+    return { card: await deps.onSummary(), action: parsed.action };
+  }
+
+  if (parsed.action === 'clarify') {
+    log.info({ clarificationId: parsed.clarificationId }, 'clarification answered');
+    if (!deps.onClarify) {
+      return { card: buildErrorCard('Not available', 'Clarifications are not enabled.') };
+    }
+    return {
+      card: await deps.onClarify({
+        clarificationId: parsed.clarificationId,
+        optionId: parsed.optionId,
+        answeredBy: request.userId,
+        answeredByName: request.userName,
+      }),
+      action: parsed.action,
     };
   }
 
